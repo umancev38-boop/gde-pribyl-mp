@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Бесплатный калькулятор прибыли продавца маркетплейсов. Рассчитайте расходы, маржу и прибыль с товара.">
+<meta name="theme-color" content="#101c2b">
+<title>Где прибыль МП — калькулятор прибыли</title>
+<style>
+:root{--bg:#f3f6f8;--ink:#142333;--muted:#667789;--navy:#101c2b;--green:#168653;--line:#e1e8ed;--white:#fff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--navy);color:white;padding:22px max(20px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{font-weight:850;letter-spacing:.04em;font-size:19px}.brand span{color:#58d69a}.tag{color:#b8c8d6;font-size:13px}
+main{max-width:1080px;margin:34px auto;padding:0 18px}.hero{margin-bottom:24px}.hero h1{font-size:clamp(28px,5vw,42px);line-height:1.12;margin:0 0 10px;letter-spacing:-.035em}.hero p{margin:0;color:var(--muted);max-width:720px}
+.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:start}.panel{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 30px #1423330a}
+h2{font-size:19px;margin:0 0 18px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}label{font-size:13px;color:#506174;font-weight:650}input,select{width:100%;border:1px solid #d6e0e7;border-radius:10px;padding:12px 13px;font:inherit;color:var(--ink);background:white;outline:none}input:focus,select:focus{border-color:#168653;box-shadow:0 0 0 3px #16865318}.hint{font-size:11px;color:#8795a2}
+.result{background:var(--navy);color:white;border-radius:15px;padding:20px;margin-bottom:14px}.result small{color:#bdcbd7}.profit{font-size:36px;font-weight:850;letter-spacing:-.04em;margin:3px 0 0}.profit.negative{color:#ff9d9d}.profit.positive{color:#70e0a6}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#f5f8fa;border-radius:12px;padding:13px}.metric span{display:block;color:var(--muted);font-size:12px}.metric strong{font-size:18px}.breakdown{margin-top:18px}.line{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}.line:last-child{border:0}.line span{color:var(--muted)}
+.note{margin-top:18px;padding:13px 14px;background:#fff8e8;border:1px solid #f2e3bd;border-radius:12px;color:#70551c;font-size:12px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.backup{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.backup p{font-size:12px;color:var(--muted);margin:0 0 10px}.fileButton{display:inline-flex;align-items:center;background:#edf2f5;color:#26394b;border-radius:10px;padding:11px 15px;font-weight:700;font-size:14px;cursor:pointer}.status{font-size:12px;color:var(--green);min-height:18px;margin-top:8px}button{border:0;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer;background:var(--green);color:white}button.secondary{background:#edf2f5;color:#26394b}
+.records{margin-top:20px}.recordsIntro{margin:-8px 0 16px;color:var(--muted);font-size:13px}.recordsGrid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.records h3{font-size:15px;margin:0 0 10px}.recordList{display:grid;gap:9px}.record{border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}.record strong{display:block;font-size:14px}.record small{display:block;color:var(--muted);font-size:12px}.recordActions{display:flex;gap:6px;flex-shrink:0}.recordActions button{padding:7px 9px;font-size:12px}.empty{color:var(--muted);font-size:13px;margin:0;padding:10px 0}.record button.delete{background:#fff0f0;color:#a52a2a}
+footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-size:12px}
+@media(max-width:760px){main{margin-top:25px}.layout{grid-template-columns:1fr}.fields{grid-template-columns:1fr 1fr}.panel{padding:18px}.recordsGrid{grid-template-columns:1fr}}
+@media(max-width:420px){.fields{grid-template-columns:1fr}.field.full{grid-column:auto}header{align-items:flex-start;flex-direction:column}}
+
+.tariffPanel{margin-top:20px}.tariffIntro{margin:-8px 0 16px;color:var(--muted);font-size:13px}
+.tariffGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tariffStatus{margin:12px 0;padding:12px 14px;border-radius:10px;background:#f2f7f4;color:#315b43;font-size:13px}
+.tariffStatus.warn{background:#fff8e8;color:#70551c}
+.tariffTools{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.tariffTools input[type=file]{display:none}
+.tariffData{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+@media(max-width:760px){.tariffGrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><div><div class="brand">ГДЕ ПРИБЫЛЬ <span>МП</span></div><div class="tag">Инструмент продавца маркетплейсов</div></div><div class="tag">Бесплатный калькулятор · версия 0.7</div></header>
+<main>
+<section class="hero"><h1>Считай прибыль,<br>а не только оборот.</h1><p>Введи цену, закупку и расходы. Калькулятор покажет ориентировочную прибыль с одной продажи и маржинальность.</p></section>
+<div class="layout">
+<section class="panel">
+<h2>Параметры товара</h2>
+<div class="fields">
+<div class="field full"><label for="market">Площадка</label><select id="market"><option>Wildberries</option><option>Ozon</option><option>Яндекс Маркет</option><option>Другая площадка</option></select></div>
+<div class="field"><label for="price">Цена продажи, ₽</label><input id="price" type="number" min="0" step="0.01" value="2490"></div>
+<div class="field"><label for="cost">Закупка товара, ₽</label><input id="cost" type="number" min="0" step="0.01" value="800"></div>
+<div class="field"><label for="commission">Комиссия площадки, % (введи свою ставку)</label><input id="commission" type="number" min="0" max="100" step="0.1" value="15"></div>
+<div class="field"><label for="logistics">Логистика, ₽</label><input id="logistics" type="number" min="0" step="0.01" value="250"></div>
+<div class="field"><label for="ads">Реклама на единицу, ₽</label><input id="ads" type="number" min="0" step="0.01" value="200"></div>
+<div class="field"><label for="other">Прочие расходы, ₽</label><input id="other" type="number" min="0" step="0.01" value="140"></div>
+<div class="field"><label for="storage">Хранение на единицу, ₽</label><input id="storage" type="number" min="0" step="0.01" value="0"></div>
+<div class="field"><label for="packaging">Упаковка и маркировка, ₽</label><input id="packaging" type="number" min="0" step="0.01" value="0"></div>
+<div class="field"><label for="returns">Резерв на возвраты и брак, ₽</label><input id="returns" type="number" min="0" step="0.01" value="0"></div>
+<div class="field"><label for="tax">Налог, % от цены</label><input id="tax" type="number" min="0" max="100" step="0.1" value="6"></div>
+<div class="field"><label for="quantity">Количество продаж</label><input id="quantity" type="number" min="1" step="1" value="1"></div>
+</div>
+<div class="actions"><button id="reset" class="secondary" type="button">Сбросить пример</button><button id="copy" type="button">Скопировать расчёт</button><button id="saveProduct" type="button">Сохранить товар</button><button id="saveCalc" class="secondary" type="button">В историю</button></div>
+<div class="backup"><p><b>Резервная копия.</b> Сохрани товары и историю в файл, чтобы перенести их на другой телефон или восстановить после очистки браузера.</p><div class="actions"><button id="exportData" class="secondary" type="button">Скачать копию</button><label class="fileButton" for="importData">Восстановить из файла</label><input id="importData" type="file" accept="application/json,.json" hidden></div><div id="backupStatus" class="status" role="status" aria-live="polite"></div></div>
+</section>
+<aside class="panel">
+<h2>Результат расчёта</h2>
+<div class="result"><small>Ориентировочная чистая прибыль с единицы</small><div id="profit" class="profit positive">577,10 ₽</div><small id="marketLabel">Wildberries · по введённым параметрам</small></div>
+<div class="metrics">
+<div class="metric"><span>Маржинальность</span><strong id="margin">23,2%</strong></div>
+<div class="metric"><span>Прибыль на объём</span><strong id="total">577,10 ₽</strong></div>
+<div class="metric"><span>Расходы всего</span><strong id="expenses">1 912,90 ₽</strong></div>
+<div class="metric"><span>Безубыточная цена</span><strong id="breakeven">1 759,49 ₽</strong></div>
+</div>
+<div class="breakdown"><h2 style="margin:20px 0 6px">Из чего складывается результат</h2>
+<div class="line"><span>Комиссия площадки</span><b id="feeValue">374 ₽</b></div>
+<div class="line"><span>Налог</span><b id="taxValue">149 ₽</b></div>
+<div class="line"><span>Закупка</span><b id="costValue">800 ₽</b></div>
+<div class="line"><span>Логистика, реклама и прочее</span><b id="opsValue">590 ₽</b></div>
+</div>
+<div id="validation" class="note" role="status" aria-live="polite">Важно: это предварительная модель. Тарифы WB можно подставить через блок «Тарифы Wildberries» после загрузки официальных JSON-ответов API. Ozon пока вводится вручную. Реальные удержания также зависят от возвратов, хранения, скидок и условий договора. Вводи фактические значения из кабинета продавца. Расчёт не является налоговой или финансовой консультацией.</div>
+</aside>
+</div>
+
+<section class="panel tariffPanel" aria-labelledby="tariffTitle">
+<h2 id="tariffTitle">Тарифы Wildberries</h2>
+<p class="tariffIntro">Загрузи JSON-ответы официального WB API: комиссии по категориям и тарифы для коробов. Модуль выберет категорию и склад, рассчитает доставку и хранение по объёму и подставит значения в калькулятор.</p>
+<div class="tariffGrid">
+<div class="field">
+<label for="commissionFile">1. Файл комиссий WB (JSON)</label>
+<label class="fileButton" for="commissionFile">Загрузить комиссии</label>
+<input id="commissionFile" type="file" accept=".json,application/json">
+<span class="hint">Ответ метода GET /api/v1/tariffs/commission</span>
+</div>
+<div class="field">
+<label for="boxFile">2. Файл тарифов коробов (JSON)</label>
+<label class="fileButton" for="boxFile">Загрузить тарифы складов</label>
+<input id="boxFile" type="file" accept=".json,application/json">
+<span class="hint">Ответ GET /api/v1/tariffs/box?date=ГГГГ-ММ-ДД</span>
+</div>
+<div class="field">
+<label for="wbCategory">Категория товара</label>
+<select id="wbCategory" disabled><option value="">Сначала загрузи комиссии</option></select>
+</div>
+<div class="field">
+<label for="wbScheme">Схема продаж</label>
+<select id="wbScheme"><option value="fbo">FBW / со склада WB</option><option value="fbs">FBS / со склада продавца</option></select>
+</div>
+<div class="field">
+<label for="wbWarehouse">Склад WB</label>
+<select id="wbWarehouse" disabled><option value="">Сначала загрузи тарифы</option></select>
+</div>
+<div class="field">
+<label for="wbLiters">Объём товара, литров</label>
+<input id="wbLiters" type="number" min="0.1" step="0.1" value="1">
+</div>
+<div class="field">
+<label for="wbStorageDays">Дней хранения</label>
+<input id="wbStorageDays" type="number" min="0" step="1" value="0">
+</div>
+<div class="field">
+<label for="wbReturnReserve">Дополнительный резерв логистики, ₽</label>
+<input id="wbReturnReserve" type="number" min="0" step="0.01" value="0">
+<span class="hint">Не включён в прямую доставку WB. Добавь сюда свою оценку обратной логистики/возвратов.</span>
+</div>
+</div>
+<div class="tariffTools">
+<button id="applyWbTariffs" type="button" disabled>Подставить тарифы в расчёт</button>
+<button id="clearWbTariffs" type="button" class="secondary">Очистить загруженные тарифы</button>
+</div>
+<div id="wbTariffStatus" class="tariffStatus warn" role="status" aria-live="polite">Пока тарифы не загружены. Никакие ставки не подставляются автоматически.</div>
+<div class="tariffData">
+<p class="hint">Безопасность: сюда загружаются только JSON-ответы API. Не загружай файл с API-ключом и не вставляй секретный токен в браузер. Для прямого обновления из кабинета потребуется серверная функция с ключом в защищённом хранилище.</p>
+</div>
+</section>
+
+<section class="panel records" aria-labelledby="recordsTitle">
+<h2 id="recordsTitle">Мои товары и история расчётов</h2>
+<p class="recordsIntro">Данные хранятся только в этом браузере на устройстве. Очистка данных сайта удалит сохранённые записи.</p>
+<div class="recordsGrid">
+<div><h3>Сохранённые товары</h3><div id="productsList" class="recordList"><p class="empty">Пока нет сохранённых товаров.</p></div></div>
+<div><h3>История расчётов</h3><div id="historyList" class="recordList"><p class="empty">Расчёты пока не сохранены.</p></div></div>
+</div>
+</section>
+</main>
+<footer>Где прибыль МП · Версия 0.7. Расчёты, товары и загруженные тарифные JSON хранятся локально в браузере, на сервер не отправляются. Сделай резервную копию перед очисткой данных браузера или сменой устройства.</footer>
+<script>
+const ids=['market','price','cost','commission','logistics','ads','other','storage','packaging','returns','tax','quantity'];
+const PRODUCT_KEY='gde_pribyl_mp_products_v04', HISTORY_KEY='gde_pribyl_mp_history_v04';
+const BACKUP_VERSION=1;
+const readStore=key=>{try{return JSON.parse(localStorage.getItem(key)||'[]')}catch(e){return []}};
+const writeStore=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));return true}catch(e){alert('Не удалось сохранить данные. Проверь свободное место и настройки браузера.');return false}};
+const el=id=>document.getElementById(id);
+const num=id=>Math.max(0,Number(el(id).value)||0);
+const money=n=>n.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
+const show=n=>Number.isFinite(n)?money(n):'—';
+function calc(){
+ const raw=Object.fromEntries(ids.map(id=>[id,Number(el(id).value)]));
+ const p=raw.price,c=raw.cost,r=raw.commission/100,l=raw.logistics,a=raw.ads,o=raw.other,s=raw.storage,pack=raw.packaging,ret=raw.returns,t=raw.tax/100,q=raw.quantity;
+ const numericIds=ids.filter(id=>id!=='market');
+ const numericOk=numericIds.every(id=>el(id).value.trim()!==''&&Number.isFinite(raw[id])&&raw[id]>=0);
+ const valid=numericOk&&p>0&&raw.commission<=100&&raw.tax<=100&&r+t<1&&Number.isInteger(q)&&q>=1;
+ const fee=p*r,tax=p*t,ops=l+a+o+s+pack+ret,expenses=c+fee+tax+ops,profit=p-expenses,margin=p?profit/p*100:0;
+ const denom=1-r-t,be=valid?(c+ops)/denom:NaN;
+ el('profit').textContent=valid?show(profit):'Проверь данные';el('profit').className='profit '+(valid&&profit>=0?'positive':'negative');
+ el('margin').textContent=valid?margin.toFixed(1).replace('.',',')+'%':'—';el('total').textContent=valid?show(profit*q):'—';el('expenses').textContent=valid?show(expenses):'—';el('breakeven').textContent=valid?show(be):'—';
+ el('feeValue').textContent=valid?show(fee):'—';el('taxValue').textContent=valid?show(tax):'—';el('costValue').textContent=valid?show(c):'—';el('opsValue').textContent=valid?show(ops):'—';
+ el('marketLabel').textContent=el('market').value+' · по введённым параметрам';
+ el('validation').textContent=valid?'Важно: предварительная модель. Тарифы WB подставляются только после загрузки официальных JSON-ответов API. Ozon и другие площадки пока рассчитываются по введённым вручную ставкам. Проверь актуальные удержания в кабинете продавца.':'Проверь данные: цена должна быть больше нуля; расходы не могут быть отрицательными; комиссия и налог должны быть от 0 до 100%, а вместе меньше 100%; количество продаж должно быть целым числом не меньше 1.';
+ return {market:el('market').value,price:p,cost:c,commission:raw.commission,logistics:l,ads:a,other:o,storage:s,packaging:pack,returns:ret,tax:raw.tax,quantity:q,profit,margin,total:profit*q,expenses,breakeven:be,valid};
+}
+ids.forEach(id=>el(id).addEventListener('input',calc));el('reset').addEventListener('click',()=>{['Wildberries','2490','800','15','250','200','140','0','0','0','6','1'].forEach((v,i)=>el(ids[i]).value=v);calc()});
+function snapshot(){const x=calc();return {...x,values:Object.fromEntries(ids.map(id=>[id,el(id).value])),savedAt:new Date().toISOString()}}
+function renderRecords(){
+ const products=readStore(PRODUCT_KEY),history=readStore(HISTORY_KEY);
+ const productRoot=el('productsList'),historyRoot=el('historyList');
+ productRoot.replaceChildren();historyRoot.replaceChildren();
+ if(!products.length)productRoot.innerHTML='<p class="empty">Пока нет сохранённых товаров.</p>';
+ products.forEach((item,i)=>{const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=item.name;const sub=document.createElement('small');sub.textContent=item.market+' · '+money(item.price);info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(PRODUCT_KEY);all.splice(i,1);if(writeStore(PRODUCT_KEY,all))renderRecords()});actions.append(load,del);node.append(info,actions);productRoot.append(node)});
+ if(!history.length)historyRoot.innerHTML='<p class="empty">Расчёты пока не сохранены.</p>';
+ history.slice().reverse().forEach((item,reverseIndex)=>{const actualIndex=history.length-1-reverseIndex;const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=money(item.profit)+' / шт.';const sub=document.createElement('small');sub.textContent=item.market+' · '+new Date(item.savedAt).toLocaleString('ru-RU');info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(HISTORY_KEY);all.splice(actualIndex,1);if(writeStore(HISTORY_KEY,all))renderRecords()});actions.append(load,del);node.append(info,actions);historyRoot.append(node)});
+}
+el('saveProduct').addEventListener('click',()=>{const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const name=prompt('Название товара:');if(!name||!name.trim())return;const all=readStore(PRODUCT_KEY);all.push({...data,name:name.trim()});if(writeStore(PRODUCT_KEY,all)){renderRecords();el('saveProduct').textContent='Сохранено';setTimeout(()=>el('saveProduct').textContent='Сохранить товар',1400)}});
+el('saveCalc').addEventListener('click',()=>{const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const all=readStore(HISTORY_KEY);all.push(data);if(writeStore(HISTORY_KEY,all)){renderRecords();el('saveCalc').textContent='Добавлено';setTimeout(()=>el('saveCalc').textContent='В историю',1400)}});
+el('exportData').addEventListener('click',()=>{
+ const backup={app:'Где прибыль МП',backupVersion:BACKUP_VERSION,createdAt:new Date().toISOString(),products:readStore(PRODUCT_KEY),history:readStore(HISTORY_KEY)};
+ const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='gde-pribyl-mp-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);el('backupStatus').textContent='Резервная копия подготовлена. Проверь папку «Файлы» на iPhone.';
+});
+el('importData').addEventListener('change',async event=>{
+ const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.app!=='Где прибыль МП'||data.backupVersion!==BACKUP_VERSION||!Array.isArray(data.products)||!Array.isArray(data.history))throw new Error('Неверный формат резервной копии');
+ if(!confirm('Восстановить резервную копию? Текущие товары и история будут заменены данными из файла.'))return;
+ const validRows=arr=>arr.every(x=>x&&typeof x==='object'&&x.values&&typeof x.values==='object'&&typeof x.market==='string');if(!validRows(data.products)||!validRows(data.history))throw new Error('Файл повреждён или имеет неподдерживаемую структуру');
+ if(!writeStore(PRODUCT_KEY,data.products)||!writeStore(HISTORY_KEY,data.history))throw new Error('Не удалось записать данные в память браузера');renderRecords();el('backupStatus').textContent='Данные успешно восстановлены.';
+ }catch(err){el('backupStatus').textContent='Ошибка: '+err.message;}finally{event.target.value='';}
+});
+el('copy').addEventListener('click',async()=>{const x=calc();if(!x.valid){el('copy').textContent='Проверь данные';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600);return}const s=`Где прибыль МП — расчёт\nПлощадка: ${x.market}\nЦена: ${money(x.price)}\nЗакупка: ${money(x.cost)}\nКомиссия: ${x.commission}%\nЛогистика: ${money(x.logistics)}\nРеклама: ${money(x.ads)}\nПрочие расходы: ${money(x.other)}\nХранение: ${money(x.storage)}\nУпаковка и маркировка: ${money(x.packaging)}\nРезерв на возвраты и брак: ${money(x.returns)}\nНалог: ${x.tax}%\nПрибыль с единицы: ${money(x.profit)}\nМаржинальность: ${x.margin.toFixed(1)}%\nПродаж: ${x.quantity}\nПрибыль на объём: ${money(x.total)}`;try{await navigator.clipboard.writeText(s);el('copy').textContent='Скопировано!';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600)}catch(e){el('copy').textContent='Не удалось скопировать'}});
+
+// Импорт тарифов Wildberries из официальных JSON-ответов. Секретный API-ключ здесь не используется.
+const WB_COMMISSION_KEY='gde_pribyl_mp_wb_commissions_v1';
+const WB_BOX_KEY='gde_pribyl_mp_wb_box_rates_v1';
+let wbCommissions=null, wbBoxRates=null;
+const parseWBNumber=value=>{
+ if(value===null||value===undefined||value==='')return 0;
+ const n=Number(String(value).replace(/\s/g,'').replace(',','.').replace('%',''));
+ return Number.isFinite(n)?n:0;
+};
+const getWBReport=data=>Array.isArray(data)?data:(Array.isArray(data?.report)?data.report:[]);
+const getWBWarehouses=data=>data?.response?.data?.warehouseList||data?.data?.warehouseList||[];
+function setWBStatus(message,isWarn=true){
+ const node=el('wbTariffStatus');node.textContent=message;node.className='tariffStatus'+(isWarn?' warn':'');
+}
+function refreshWBCategories(){
+ const select=el('wbCategory');select.replaceChildren();
+ const rows=getWBReport(wbCommissions);
+ if(!rows.length){select.disabled=true;select.add(new Option('В файле не найдены комиссии',''));return}
+ const unique=new Map();
+ rows.forEach((row,index)=>{
+  const label=[row.parentName,row.subjectName].filter(Boolean).join(' / ')||('Категория '+(index+1));
+  const key=String(row.subjectID??row.parentID??index);
+  if(!unique.has(key))unique.set(key,{label,row});
+ });
+ [...unique.entries()].forEach(([key,item])=>select.add(new Option(item.label,key)));
+ select.disabled=false;
+}
+function refreshWBWarehouses(){
+ const select=el('wbWarehouse');select.replaceChildren();
+ const rows=getWBWarehouses(wbBoxRates);
+ if(!rows.length){select.disabled=true;select.add(new Option('В файле не найдены склады',''));return}
+ rows.forEach((row,index)=>select.add(new Option(row.warehouseName||('Склад '+(index+1)),String(index))));
+ select.disabled=false;
+}
+async function loadWBJson(inputId,kind){
+ const file=el(inputId).files?.[0];if(!file)return;
+ try{
+  const data=JSON.parse(await file.text());
+  if(kind==='commission'){
+   if(!getWBReport(data).length)throw new Error('Не найден массив report с комиссиями.');
+   wbCommissions=data;localStorage.setItem(WB_COMMISSION_KEY,JSON.stringify(data));refreshWBCategories();
+  }else{
+   if(!getWBWarehouses(data).length)throw new Error('Не найден response.data.warehouseList со складами.');
+   wbBoxRates=data;localStorage.setItem(WB_BOX_KEY,JSON.stringify(data));refreshWBWarehouses();
+  }
+  updateWBApplyState();
+  setWBStatus('Данные '+(kind==='commission'?'комиссий':'тарифов складов')+' загружены из файла «'+file.name+'». Проверь категорию, склад и схему продаж.',false);
+ }catch(error){setWBStatus('Не удалось прочитать файл: '+error.message,true)}
+ finally{el(inputId).value=''}
+}
+function updateWBApplyState(){
+ el('applyWbTariffs').disabled=!(getWBReport(wbCommissions).length&&getWBWarehouses(wbBoxRates).length);
+}
+function applyWBTariffs(){
+ const rows=getWBReport(wbCommissions),warehouses=getWBWarehouses(wbBoxRates);
+ const chosen=rows.find(row=>String(row.subjectID??row.parentID)===el('wbCategory').value)||rows[0];
+ const warehouse=warehouses[Number(el('wbWarehouse').value)];
+ if(!chosen||!warehouse){setWBStatus('Выбери категорию и склад из загруженных данных.',true);return}
+ const scheme=el('wbScheme').value;
+ // WB fields: kgvpMarketplace — модель со склада WB (FBW), kgvpSupplier — со склада продавца (FBS).
+ const commission=parseWBNumber(scheme==='fbo'?chosen.kgvpMarketplace:chosen.kgvpSupplier);
+ const liters=Math.max(0.1,parseWBNumber(el('wbLiters').value));
+ const extraLiters=Math.max(0,liters-1);
+ const deliveryBase=parseWBNumber(scheme==='fbo'?warehouse.boxDeliveryBase:warehouse.boxDeliveryMarketplaceBase);
+ const deliveryLiter=parseWBNumber(scheme==='fbo'?warehouse.boxDeliveryLiter:warehouse.boxDeliveryMarketplaceLiter);
+ const storageBase=parseWBNumber(warehouse.boxStorageBase),storageLiter=parseWBNumber(warehouse.boxStorageLiter);
+ const storageDays=Math.max(0,Math.floor(parseWBNumber(el('wbStorageDays').value)));
+ const logistics=deliveryBase+extraLiters*deliveryLiter+parseWBNumber(el('wbReturnReserve').value);
+ const storage=(storageBase+extraLiters*storageLiter)*storageDays;
+ if(!(commission>0)){setWBStatus('Для выбранной категории не найдено значение комиссии '+(scheme==='fbo'?'kgvpMarketplace':'kgvpSupplier')+'. Выбери другую категорию или проверь выгрузку.',true);return}
+ el('commission').value=commission.toString();
+ el('logistics').value=logistics.toFixed(2);
+ el('storage').value=storage.toFixed(2);
+ calc();
+ const coefficient=scheme==='fbo'?warehouse.boxDeliveryCoefExpr:warehouse.boxDeliveryMarketplaceCoefExpr;
+ setWBStatus('Подставлено: комиссия '+commission+'%; склад «'+(warehouse.warehouseName||'без названия')+'»; доставка '+money(logistics)+'; хранение '+money(storage)+'. Объём '+liters+' л, хранение '+storageDays+' дн. Коэффициент WB '+(coefficient??'не указан')+'% уже учтён в тарифных ставках по документации API. Проверь остальные расходы и нажми «Сохранить товар», если нужно.',false);
+}
+el('commissionFile').addEventListener('change',()=>loadWBJson('commissionFile','commission'));
+el('boxFile').addEventListener('change',()=>loadWBJson('boxFile','box'));
+el('wbCategory').addEventListener('change',updateWBApplyState);
+el('wbWarehouse').addEventListener('change',updateWBApplyState);
+el('applyWbTariffs').addEventListener('click',applyWBTariffs);
+el('clearWbTariffs').addEventListener('click',()=>{
+ wbCommissions=null;wbBoxRates=null;
+ localStorage.removeItem(WB_COMMISSION_KEY);localStorage.removeItem(WB_BOX_KEY);
+ el('wbCategory').replaceChildren(new Option('Сначала загрузи комиссии',''));el('wbCategory').disabled=true;
+ el('wbWarehouse').replaceChildren(new Option('Сначала загрузи тарифы',''));el('wbWarehouse').disabled=true;
+ updateWBApplyState();setWBStatus('Загруженные данные WB удалены. Текущие поля калькулятора не изменены.',true);
+});
+try{
+ wbCommissions=JSON.parse(localStorage.getItem(WB_COMMISSION_KEY)||'null');
+ wbBoxRates=JSON.parse(localStorage.getItem(WB_BOX_KEY)||'null');
+ if(wbCommissions)refreshWBCategories();if(wbBoxRates)refreshWBWarehouses();
+ updateWBApplyState();
+ if(wbCommissions||wbBoxRates)setWBStatus('Найдены ранее загруженные данные WB на этом устройстве. Для применения проверь категорию, склад и параметры товара.',false);
+}catch(e){setWBStatus('Сохранённые данные тарифов повреждены. Загрузи JSON-файлы заново.',true)}
+
+calc();renderRecords();
+// iPhone: страница остаётся обычным сайтом; добавление на экран «Домой» даёт быстрый запуск, но не синхронизирует данные между устройствами.
+</script>
+</body>
+</html>
