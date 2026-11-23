@@ -18,7 +18,9 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: APP_URL
-        sync: false
+        value: https://gde-pribyl-mp.onrender.com
+      - key: RECURRING_ENABLED
+        value: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ROBOKASSA_MERCHANT_LOGIN
