@@ -112,62 +112,79 @@ app.post('/api/billing/checkout', auth, async (req, res, next) => {
     requirePaymentConfig();
     const plan = String(req.body.plan || '');
     if (!['pro', 'business'].includes(plan)) return res.status(400).json({ error: 'Выбери платный тариф' });
-    if (req.body.recurringConsent !== true) return res.status(400).json({ error: 'Для подписки необходимо отдельно подтвердить согласие на ежемесячные автосписания' });
-    if (process.env.RECURRING_ENABLED !== 'true') return res.status(503).json({ error: 'Рекуррентные платежи пока не включены. Ожидается согласование Robokassa.' });
+    const recurringEnabled = process.env.RECURRING_ENABLED === 'true';
+    const recurringConsent = req.body.recurringConsent === true;
+    if (recurringEnabled && !recurringConsent) return res.status(400).json({ error: 'Для автопродления необходимо отдельное согласие' });
     const user = await loadUser(req.auth.sub);
     if (!user) return res.status(401).json({ error: 'Аккаунт не найден' });
     const invoiceId = Number(String(Date.now()) + String(crypto.randomInt(100, 999)));
     const amount = plans[plan].price.toFixed(2);
     const description = 'Подписка ' + plans[plan].name + ' — Где прибыль МП';
     const signatureValue = signature([login, amount, invoiceId, pass1].join(':'));
-    await pool.query('INSERT INTO payments(user_id,invoice_id,amount_rub,status,provider_payload) VALUES($1,$2,$3,\'pending\',$4)', [user.id, invoiceId, amount, JSON.stringify({ plan })]);
+    await pool.query(
+      "INSERT INTO payments(user_id,invoice_id,amount_rub,status,provider_payload) VALUES($1,$2,$3,'pending',$4)",
+      [user.id, invoiceId, amount, JSON.stringify({ plan, recurring: recurringEnabled && recurringConsent, renewal: false })]
+    );
     const params = new URLSearchParams({
       MerchantLogin: login, OutSum: amount, InvId: String(invoiceId), Description: description,
-      SignatureValue: signatureValue, Recurring: 'true', Email: user.email,
-      Culture: 'ru', Encoding: 'utf-8'
+      SignatureValue: signatureValue, Email: user.email, Culture: 'ru', Encoding: 'utf-8'
     });
-    const url = 'https://auth.robokassa.ru/Merchant/Index.aspx?' + params.toString();
-    res.json({ paymentUrl: url, invoiceId, amount: Number(amount), currency: 'RUB', plan });
+    if (recurringEnabled && recurringConsent) params.set('Recurring', 'true');
+    res.json({ paymentUrl: 'https://auth.robokassa.ru/Merchant/Index.aspx?' + params.toString(), invoiceId, amount: Number(amount), currency: 'RUB', plan, autoRenew: recurringEnabled && recurringConsent });
   } catch (e) { next(e); }
 });
 
-// ResultURL: подписка включается только после проверки подписи и суммы callback.
+// ResultURL is authoritative: only a verified callback activates or extends access.
 app.post('/api/billing/robokassa/result', async (req, res, next) => {
   const client = await pool.connect();
+  let inTransaction = false;
   try {
     const outSum = String(req.body.OutSum || '');
-    const invId = String(req.body.InvId || '');
+    const invId = String(req.body.InvId || req.body.InvoiceID || '');
     const supplied = String(req.body.SignatureValue || '');
     const expected = signature([outSum, invId, pass2].join(':'));
     if (!safeEqual(supplied, expected)) return res.status(403).send('bad sign');
     await client.query('BEGIN');
+    inTransaction = true;
     const payment = await client.query('SELECT * FROM payments WHERE invoice_id=$1 FOR UPDATE', [invId]);
-    if (!payment.rowCount) { await client.query('ROLLBACK'); return res.status(404).send('not found'); }
+    if (!payment.rowCount) { await client.query('ROLLBACK'); inTransaction = false; return res.status(404).send('not found'); }
     const p = payment.rows[0];
-    if (Number(p.amount_rub).toFixed(2) !== Number(outSum).toFixed(2)) { await client.query('ROLLBACK'); return res.status(400).send('bad amount'); }
+    if (Number(p.amount_rub).toFixed(2) !== Number(outSum).toFixed(2)) { await client.query('ROLLBACK'); inTransaction = false; return res.status(400).send('bad amount'); }
     if (p.status !== 'paid') {
       const plan = p.provider_payload.plan;
       const start = new Date();
       const end = new Date(start); end.setMonth(end.getMonth() + 1);
-      const sub = await client.query(
-        "INSERT INTO subscriptions(user_id,plan,status,price_rub,period_start,period_end,auto_renew,robokassa_parent_invoice,next_charge_at) VALUES($1,$2,'active',$3,$4,$5,true,$6,$5) RETURNING id",
-        [p.user_id, plan, plans[plan].price, start, end, invId]
-      );
-      await client.query("UPDATE subscriptions SET status='canceled',auto_renew=false,canceled_at=now(),updated_at=now() WHERE user_id=$1 AND id<>$2 AND status='active'", [p.user_id, sub.rows[0].id]);
-      await client.query("UPDATE payments SET status='paid',paid_at=now(),subscription_id=$2,provider_payload=provider_payload || $3::jsonb WHERE invoice_id=$1", [invId, sub.rows[0].id, JSON.stringify({ callback: req.body })]);
+      let subscriptionId = p.subscription_id;
+      if (p.provider_payload.renewal && subscriptionId) {
+        await client.query(
+          "UPDATE subscriptions SET status='active',period_start=$2,period_end=$3,next_charge_at=$3,updated_at=now() WHERE id=$1",
+          [subscriptionId, start, end]
+        );
+      } else {
+        const sub = await client.query(
+          "INSERT INTO subscriptions(user_id,plan,status,price_rub,period_start,period_end,auto_renew,robokassa_parent_invoice,next_charge_at) VALUES($1,$2,'active',$3,$4,$5,$6,$7,$8) RETURNING id",
+          [p.user_id, plan, plans[plan].price, start, end, Boolean(p.provider_payload.recurring), p.provider_payload.recurring ? invId : null, p.provider_payload.recurring ? end : null]
+        );
+        subscriptionId = sub.rows[0].id;
+        await client.query("UPDATE subscriptions SET status='canceled',auto_renew=false,canceled_at=now(),updated_at=now() WHERE user_id=$1 AND id<>$2 AND status='active'", [p.user_id, subscriptionId]);
+      }
+      await client.query("UPDATE payments SET status='paid',paid_at=now(),subscription_id=$2,provider_payload=provider_payload || $3::jsonb WHERE invoice_id=$1", [invId, subscriptionId, JSON.stringify({ callbackReceived: true })]);
       await client.query('INSERT INTO audit_log(actor_user_id,event,details) VALUES($1,$2,$3)', [p.user_id, 'payment.succeeded', JSON.stringify({ invoiceId: invId, plan })]);
     }
     await client.query('COMMIT');
+    inTransaction = false;
     res.type('text').send('OK' + invId);
-  } catch (e) { await client.query('ROLLBACK'); next(e); }
-  finally { client.release(); }
+  } catch (e) {
+    if (inTransaction) await client.query('ROLLBACK');
+    next(e);
+  } finally { client.release(); }
 });
 app.get('/api/billing/success', (_req, res) => res.redirect('/?payment=return'));
 app.get('/api/billing/fail', (_req, res) => res.redirect('/?payment=failed'));
 
 app.post('/api/billing/cancel', auth, async (req, res, next) => {
   try {
-    const result = await pool.query("UPDATE subscriptions SET auto_renew=false,status='canceled',canceled_at=now(),updated_at=now() WHERE user_id=$1 AND status='active' RETURNING id,period_end", [req.auth.sub]);
+    const result = await pool.query("UPDATE subscriptions SET auto_renew=false,canceled_at=now(),updated_at=now() WHERE user_id=$1 AND status='active' AND auto_renew=true RETURNING id,period_end", [req.auth.sub]);
     if (!result.rowCount) return res.status(404).json({ error: 'Активная подписка не найдена' });
     res.json({ canceled: true, accessUntil: result.rows[0].period_end });
   } catch (e) { next(e); }
