@@ -137,12 +137,11 @@ app.post("/api/payments/create", async (req, res) => {
   const amount = Number(plan.amount).toFixed(2);
   const client = await pool.connect();
   try {
-    const inserted = await client.query(
-      "INSERT INTO payments(plan_code, amount, status, robokassa_invoice_id) VALUES($1,$2,'pending','pending') RETURNING id",
-      [planCode, amount]
+    const invoiceId = String(Date.now()) + String(crypto.randomInt(1000, 9999));
+    await client.query(
+      "INSERT INTO payments(plan_code, amount, status, robokassa_invoice_id) VALUES($1,$2,'pending',$3)",
+      [planCode, amount, invoiceId]
     );
-    const invoiceId = String(inserted.rows[0].id);
-    await client.query("UPDATE payments SET robokassa_invoice_id=$1 WHERE id=$2", [invoiceId, inserted.rows[0].id]);
 
     const params = {
       MerchantLogin: MERCHANT_LOGIN,
