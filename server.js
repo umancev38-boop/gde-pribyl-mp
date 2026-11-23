@@ -37,7 +37,7 @@ function tokenFor(user) {
   return jwt.sign({ sub: user.id, role: user.role }, secret, { expiresIn: '7d', issuer: 'gde-pribyl-mp' });
 }
 function auth(req, res, next) {
-  const raw = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || req.cookies?.token;
+  const raw = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || req.cookies?.gpm_session;
   if (!raw) return res.status(401).json({ error: 'Требуется вход в аккаунт' });
   try { req.auth = jwt.verify(raw, secret, { issuer: 'gde-pribyl-mp' }); next(); }
   catch { return res.status(401).json({ error: 'Сессия истекла. Войди снова.' }); }
@@ -55,7 +55,8 @@ function safeEqual(a, b) {
 function requirePaymentConfig() {
   if (!login || !pass1 || !pass2 || !publicUrl.startsWith('https://')) throw new Error('Платежи не настроены: нужны MerchantLogin, пароли и публичный HTTPS APP_URL');
 }
-function setSession(res, user) { res.cookie('gpm_session', tokenFor(user), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000, path: '/' }); }\nfunction currentUserPlan(row) {
+function setSession(res, user) { res.cookie('gpm_session', tokenFor(user), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000, path: '/' }); }
+function currentUserPlan(row) {
   const plan = row?.plan && row.status === 'active' && (!row.period_end || new Date(row.period_end) > new Date()) ? row.plan : 'free';
   return { ...plans[plan], code: plan, status: row?.status || 'active', periodEnd: row?.period_end || null, autoRenew: Boolean(row?.auto_renew) };
 }
@@ -97,7 +98,8 @@ app.post('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10 }), 
     setSession(res, user); res.json({ user, subscription: currentUserPlan(await loadSubscription(user.id)) });
   } catch (e) { next(e); }
 });
-app.post('/api/auth/logout', (_req, res) => { res.clearCookie('gpm_session', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' }); res.json({ ok: true }); });\napp.get('/api/me', auth, async (req, res, next) => {
+app.post('/api/auth/logout', (_req, res) => { res.clearCookie('gpm_session', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' }); res.json({ ok: true }); });
+app.get('/api/me', auth, async (req, res, next) => {
   try {
     const user = await loadUser(req.auth.sub);
     if (!user) return res.status(401).json({ error: 'Аккаунт не найден' });
@@ -109,7 +111,9 @@ app.post('/api/billing/checkout', auth, async (req, res, next) => {
   try {
     requirePaymentConfig();
     const plan = String(req.body.plan || '');
-    if (!['pro', 'business'].includes(plan)) return res.status(400).json({ error: 'Выбери платный тариф' });\n    if (req.body.recurringConsent !== true) return res.status(400).json({ error: 'Для подписки необходимо отдельно подтвердить согласие на ежемесячные автосписания' });\n    if (process.env.RECURRING_ENABLED !== 'true') return res.status(503).json({ error: 'Рекуррентные платежи пока не включены. Ожидается согласование Robokassa.' });
+    if (!['pro', 'business'].includes(plan)) return res.status(400).json({ error: 'Выбери платный тариф' });
+    if (req.body.recurringConsent !== true) return res.status(400).json({ error: 'Для подписки необходимо отдельно подтвердить согласие на ежемесячные автосписания' });
+    if (process.env.RECURRING_ENABLED !== 'true') return res.status(503).json({ error: 'Рекуррентные платежи пока не включены. Ожидается согласование Robokassa.' });
     const user = await loadUser(req.auth.sub);
     if (!user) return res.status(401).json({ error: 'Аккаунт не найден' });
     const invoiceId = Number(String(Date.now()) + String(crypto.randomInt(100, 999)));
