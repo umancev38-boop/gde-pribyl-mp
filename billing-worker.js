@@ -10,6 +10,7 @@ const prices = { pro: 490, business: 990 };
 const md5 = s => crypto.createHash('md5').update(s).digest('hex').toLowerCase();
 
 async function billDue() {
+  if (process.env.RECURRING_ENABLED !== 'true') return;
   if (!login || !pass1 || !pass2) return console.error('Recurring billing skipped: Robokassa credentials are missing');
   const client = await pool.connect();
   try {
