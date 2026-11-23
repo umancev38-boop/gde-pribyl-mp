@@ -171,7 +171,7 @@ async function handleResult(req, res) {
   const invoiceId = String(params.InvId || "");
   const amount = String(params.OutSum || "");
   const signature = String(params.SignatureValue || "");
-  if (!/^\\d+$/.test(invoiceId) || !/^\\d+\\.\\d{2}$/.test(amount) ||
+  if (!/^\d+$/.test(invoiceId) || !/^\d+\.\d{2}$/.test(amount) ||
       !safeEqual(resultSignature(params), signature)) {
     return res.status(400).send("BAD_SIGNATURE");
   }
