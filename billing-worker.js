@@ -32,9 +32,15 @@ async function billDue() {
       const response = await fetch('https://auth.robokassa.ru/Merchant/Recurring', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
       const result = await response.text();
       await client.query('UPDATE payments SET provider_payload=provider_payload || $2::jsonb WHERE invoice_id=$1', [invoiceId, JSON.stringify({ recurringResponse: result.slice(0, 500) })]);
-      // ResultURL is authoritative; keep access state until provider confirms the charge.
-      const next = new Date(sub.next_charge_at); next.setMonth(next.getMonth() + 1);
-      await client.query("UPDATE subscriptions SET next_charge_at=$2,updated_at=now() WHERE id=$1", [sub.id, next]);
+      if (!response.ok || !result.startsWith('OK')) {
+        await client.query("UPDATE payments SET status='failed' WHERE invoice_id=$1", [invoiceId]);
+        await client.query("UPDATE subscriptions SET status='past_due',auto_renew=false,updated_at=now() WHERE id=$1", [sub.id]);
+        continue;
+      }
+      // "OK+InvoiceId" means the recurring operation was created, not yet paid.
+      // ResultURL must confirm the charge before access is extended.
+      const retryAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await client.query("UPDATE subscriptions SET next_charge_at=$2,updated_at=now() WHERE id=$1", [sub.id, retryAt]);
     }
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); console.error('Billing worker error', e); }
