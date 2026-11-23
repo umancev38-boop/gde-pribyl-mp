@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -26,6 +27,7 @@ const publicUrl = (process.env.APP_URL || '').replace(/\/$/, '');
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: publicUrl || false, credentials: true }));
+app.use(cookieParser());
 app.use(express.urlencoded({ extended: false, limit: '20kb' }));
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static('public'));
@@ -53,7 +55,7 @@ function safeEqual(a, b) {
 function requirePaymentConfig() {
   if (!login || !pass1 || !pass2 || !publicUrl.startsWith('https://')) throw new Error('Платежи не настроены: нужны MerchantLogin, пароли и публичный HTTPS APP_URL');
 }
-function currentUserPlan(row) {
+function setSession(res, user) { res.cookie('gpm_session', tokenFor(user), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000, path: '/' }); }\nfunction currentUserPlan(row) {
   const plan = row?.plan && row.status === 'active' && (!row.period_end || new Date(row.period_end) > new Date()) ? row.plan : 'free';
   return { ...plans[plan], code: plan, status: row?.status || 'active', periodEnd: row?.period_end || null, autoRenew: Boolean(row?.auto_renew) };
 }
@@ -83,7 +85,7 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 60 * 1000, limit: 8 })
     const created = await pool.query('INSERT INTO users(email,password_hash,display_name,role) VALUES($1,$2,$3,$4) RETURNING id,email,display_name,role', [email, hash, displayName, role]);
     const user = created.rows[0];
     await pool.query("INSERT INTO subscriptions(user_id,plan,status,price_rub) VALUES($1,'free','active',0)", [user.id]);
-    res.status(201).json({ token: tokenFor(user), user, subscription: currentUserPlan(await loadSubscription(user.id)) });
+    setSession(res, user); res.status(201).json({ user, subscription: currentUserPlan(await loadSubscription(user.id)) });
   } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Этот email уже зарегистрирован' }); next(e); }
 });
 app.post('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10 }), async (req, res, next) => {
@@ -92,10 +94,10 @@ app.post('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10 }), 
     const q = await pool.query('SELECT id,email,password_hash,display_name,role FROM users WHERE email=$1', [email]);
     if (!q.rowCount || !(await bcrypt.compare(String(req.body.password || ''), q.rows[0].password_hash))) return res.status(401).json({ error: 'Неверный email или пароль' });
     const user = q.rows[0]; delete user.password_hash;
-    res.json({ token: tokenFor(user), user, subscription: currentUserPlan(await loadSubscription(user.id)) });
+    setSession(res, user); res.json({ user, subscription: currentUserPlan(await loadSubscription(user.id)) });
   } catch (e) { next(e); }
 });
-app.get('/api/me', auth, async (req, res, next) => {
+app.post('/api/auth/logout', (_req, res) => { res.clearCookie('gpm_session', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' }); res.json({ ok: true }); });\napp.get('/api/me', auth, async (req, res, next) => {
   try {
     const user = await loadUser(req.auth.sub);
     if (!user) return res.status(401).json({ error: 'Аккаунт не найден' });
@@ -107,7 +109,7 @@ app.post('/api/billing/checkout', auth, async (req, res, next) => {
   try {
     requirePaymentConfig();
     const plan = String(req.body.plan || '');
-    if (!['pro', 'business'].includes(plan)) return res.status(400).json({ error: 'Выбери платный тариф' });
+    if (!['pro', 'business'].includes(plan)) return res.status(400).json({ error: 'Выбери платный тариф' });\n    if (req.body.recurringConsent !== true) return res.status(400).json({ error: 'Для подписки необходимо отдельно подтвердить согласие на ежемесячные автосписания' });\n    if (process.env.RECURRING_ENABLED !== 'true') return res.status(503).json({ error: 'Рекуррентные платежи пока не включены. Ожидается согласование Robokassa.' });
     const user = await loadUser(req.auth.sub);
     if (!user) return res.status(401).json({ error: 'Аккаунт не найден' });
     const invoiceId = Number(String(Date.now()) + String(crypto.randomInt(100, 999)));
