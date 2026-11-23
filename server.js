@@ -8,6 +8,19 @@ app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(express.json({ limit: "32kb" }));
 
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://gde-pribyl-mp.onrender.com";
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin === FRONTEND_ORIGIN) {
+    res.setHeader("Access-Control-Allow-Origin", FRONTEND_ORIGIN);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 const PORT = Number(process.env.PORT || 3000);
 const SITE_URL = process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
 const MERCHANT_LOGIN = process.env.ROBOKASSA_MERCHANT_LOGIN || "";
