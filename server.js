@@ -1,6 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import pg from "pg";
+import { PLAN_ENTITLEMENTS } from "./lib/entitlements.js";
 
 const { Pool } = pg;
 const app = express();
@@ -123,7 +124,7 @@ function configReady() {
 }
 
 async function initDb() {
-  if (!pool) return;
+  if (!pool) throw new Error("DATABASE_URL is not configured");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id BIGSERIAL PRIMARY KEY,
@@ -182,15 +183,11 @@ async function initDb() {
 
 const SESSION_COOKIE = "gpm_session";
 const SESSION_DAYS = 30;
-const PLAN_ENTITLEMENTS = {
-  free: { products: 5, history: 20, analytics: false, csvExport: false, targetMargin: false, teamSeats: 1 },
-  pro: { products: 200, history: 1000, analytics: false, csvExport: false, targetMargin: true, teamSeats: 1 },
-  business: { products: 5000, history: 10000, analytics: true, csvExport: true, targetMargin: true, teamSeats: 5 }
-};
 const hashToken = token => crypto.createHash("sha256").update(token).digest("hex");
 function cookieValue(req,name) {
   const item=String(req.headers.cookie||"").split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="));
-  return item ? decodeURIComponent(item.slice(name.length+1)) : "";
+  if (!item) return "";
+  try { return decodeURIComponent(item.slice(name.length+1)); } catch { return ""; }
 }
 function sessionCookie(res,token) {
   res.cookie(SESSION_COOKIE,token,{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:SESSION_DAYS*86400000});
@@ -205,10 +202,10 @@ function sameOrigin(req,res,next) {
 function derivePassword(password,salt) {
   return new Promise((resolve,reject)=>crypto.scrypt(password,salt,64,{N:16384,r:8,p:1,maxmem:64*1024*1024},(err,key)=>err?reject(err):resolve(key.toString("hex"))));
 }
-async function createUserSession(userId,res) {
+async function createUserSession(userId, db = pool) {
   const token=crypto.randomBytes(32).toString("base64url");
-  await pool.query("INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[hashToken(token),userId]);
-  sessionCookie(res,token);
+  await db.query("INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[hashToken(token),userId]);
+  return token;
 }
 async function requireUser(req,res,next) {
   if(!pool) return res.status(503).json({error:"База данных не настроена."});
@@ -236,17 +233,22 @@ app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
   const password=String(req.body?.password||"");
   if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:"Укажи корректный e-mail."});
   if(password.length<10||password.length>128) return res.status(400).json({error:"Пароль должен содержать от 10 до 128 символов."});
+  const client=await pool.connect();
   try {
     const salt=crypto.randomBytes(16).toString("hex");
     const passwordHash=await derivePassword(password,salt);
-    const created=await pool.query("INSERT INTO users(email,password_salt,password_hash) VALUES($1,$2,$3) ON CONFLICT(email) DO NOTHING RETURNING id,email",[email,salt,passwordHash]);
-    if(!created.rowCount) return res.status(409).json({error:"Аккаунт с таким e-mail уже существует."});
-    await createUserSession(created.rows[0].id,res);
+    await client.query("BEGIN");
+    const created=await client.query("INSERT INTO users(email,password_salt,password_hash) VALUES($1,$2,$3) ON CONFLICT(email) DO NOTHING RETURNING id,email",[email,salt,passwordHash]);
+    if(!created.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({error:"Аккаунт с таким e-mail уже существует."}); }
+    const token=await createUserSession(created.rows[0].id,client);
+    await client.query("COMMIT");
+    sessionCookie(res,token);
     return res.status(201).json({user:created.rows[0],plan:"free",limits:PLAN_ENTITLEMENTS.free});
   } catch(error) {
+    await client.query("ROLLBACK").catch(()=>{});
     console.error("Registration failed:",error.message);
     res.status(500).json({error:"Не удалось создать аккаунт."});
-  }
+  } finally { client.release(); }
 });
 app.post("/api/auth/login",rateLimit({max:10}),sameOrigin,async(req,res)=>{
   if(!pool) return res.status(503).json({error:"Вход временно недоступен."});
@@ -258,7 +260,8 @@ app.post("/api/auth/login",rateLimit({max:10}),sameOrigin,async(req,res)=>{
     if(!found.rowCount) return res.status(401).json({error:"Неверный e-mail или пароль."});
     const user=found.rows[0],candidate=await derivePassword(password,user.password_salt);
     if(!safeEqual(candidate,user.password_hash)) return res.status(401).json({error:"Неверный e-mail или пароль."});
-    await createUserSession(user.id,res);
+    const token=await createUserSession(user.id);
+    sessionCookie(res,token);
     return res.json({user:{id:user.id,email:user.email},...await accountPlan(user.id)});
   } catch(error) {
     console.error("Login failed:",error.message);
@@ -313,18 +316,16 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
   }
 });
 
-app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    version: "1.0.0-auth-stage",
-    accountsConfigured: Boolean(pool),
-    serverSideQuotas: true,
-    paymentsConfigured: configReady(),
-    databaseConfigured: Boolean(pool),
-    merchantConfigured: Boolean(MERCHANT_LOGIN),
-    passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
-    plansConfigured: Object.keys(plans).length > 0,
-    testMode: TEST_MODE,
+app.get("/health", async (_req, res) => {
+  let databaseHealthy=false;
+  if(pool) { try { await pool.query("SELECT 1"); databaseHealthy=true; } catch(error) { console.error("Health database check failed:",error.message); } }
+  const healthy=Boolean(pool)&&databaseHealthy;
+  res.setHeader("Cache-Control","no-store");
+  res.status(healthy?200:503).json({
+    ok: healthy, version: "1.0.0-auth-stage", accountsConfigured: Boolean(pool), serverSideQuotas: true,
+    paymentsConfigured: configReady(), databaseConfigured: Boolean(pool), databaseHealthy,
+    merchantConfigured: Boolean(MERCHANT_LOGIN), passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
+    plansConfigured: Object.keys(plans).length > 0, testMode: TEST_MODE, entitlements: PLAN_ENTITLEMENTS,
     planSummary: Object.fromEntries(Object.entries(plans).map(([code, plan]) => [code, { amount: Number(plan.amount), days: Number(plan.days), label: String(plan.label || code) }]))
   });
 });
@@ -465,10 +466,29 @@ app.get("/api/subscription/status", rateLimit({ max: 60 }), requireUser, async (
   }
 });
 
+async function verifyDbRoundTrip() {
+  const client=await pool.connect();
+  const marker=crypto.randomUUID();
+  try {
+    await client.query("BEGIN");
+    const created=await client.query("INSERT INTO users(email,password_salt,password_hash) VALUES($1,$2,$3) RETURNING id",["health-"+marker+"@invalid.local","health-check","health-check"]);
+    const userId=created.rows[0].id;
+    const token=crypto.randomBytes(32).toString("base64url");
+    await client.query("INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '1 minute')",[hashToken(token),userId]);
+    await client.query("INSERT INTO user_products(user_id,data) VALUES($1,$2::jsonb)",[userId,JSON.stringify({id:marker,name:"health-check"})]);
+    await client.query("INSERT INTO user_history(user_id,data) VALUES($1,$2::jsonb)",[userId,JSON.stringify({id:marker,profit:1})]);
+    const result=await client.query("SELECT u.email,s.token_hash,p.data AS product,h.data AS history FROM users u JOIN user_sessions s ON s.user_id=u.id JOIN user_products p ON p.user_id=u.id JOIN user_history h ON h.user_id=u.id WHERE u.id=$1",[userId]);
+    if(result.rowCount!==1 || result.rows[0].product.id!==marker || result.rows[0].history.id!==marker || result.rows[0].token_hash!==hashToken(token)) throw new Error("PostgreSQL read/write round-trip returned unexpected data");
+    await client.query("ROLLBACK");
+  } catch(error) { await client.query("ROLLBACK").catch(()=>{}); throw error; }
+  finally { client.release(); }
+}
 app.listen(PORT, async () => {
   try {
     await initDb();
-    console.log(`Где прибыль МП API 0.8 listening on ${PORT}`);
+    await verifyDbRoundTrip();
+    console.log("PostgreSQL read/write smoke test passed (transaction rolled back)");
+    console.log(`Где прибыль МП API 1.0 listening on ${PORT}`);
     console.log("Payment configuration:", JSON.stringify({
       databaseConfigured: Boolean(pool),
       merchantConfigured: Boolean(MERCHANT_LOGIN),
