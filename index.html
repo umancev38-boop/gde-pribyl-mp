@@ -139,6 +139,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Расширенный уровень доступа к аналитическим возможностям сервиса.</p><button type="button" data-pay-plan="pro">Оплатить PRO</button></article>
 <article class="priceCard"><h3>BUSINESS</h3><div class="priceValue">900 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Максимальный уровень доступа для продавцов с большим ассортиментом.</p><button type="button" data-pay-plan="business">Оплатить BUSINESS</button></article>
 </div>
+<div class="field" style="max-width:420px;margin:0 0 14px"><label for="paymentEmail">E-mail для отправки чека</label><input id="paymentEmail" type="email" autocomplete="email" placeholder="name@example.com" required></div>
 <p class="priceNote">Состав функций выбранного тарифа указывается перед оформлением заказа. Автоматического списания за следующий период нет.</p>
 <div id="paymentStatus" class="status" role="status" aria-live="polite">Проверяем статус подписки…</div>
 <div class="legalLinks"><a href="/legal.html#offer">Публичная оферта</a><a href="/legal.html#refund">Возврат и отказ</a><a href="/legal.html#privacy">Политика персональных данных</a><a href="/legal.html#contacts">Контакты и реквизиты</a></div>
@@ -335,14 +336,20 @@ async function refreshSubscription(){
 async function startPayment(planCode,button){
  const original=button.textContent;button.disabled=true;button.textContent='Создаём платёж…';
  try{
+  const email=el('paymentEmail').value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Укажи корректный e-mail для чека.');
   const response=await fetch(PAYMENT_API+'/api/payments/create',{
    method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({plan:planCode,customerToken:getCustomerToken()})
+   body:JSON.stringify({plan:planCode,customerToken:getCustomerToken(),email})
   });
   const data=await response.json();
   if(!response.ok)throw new Error(data.error||'Не удалось создать платёж');
-  if(!data.paymentUrl)throw new Error('Платёжная ссылка не получена');
-  window.location.assign(data.paymentUrl);
+  if(!data.paymentUrl||!data.paymentParams)throw new Error('Параметры платежа не получены');
+  const form=document.createElement('form');form.method='POST';form.action=data.paymentUrl;
+  Object.entries(data.paymentParams).forEach(([key,value])=>{
+   const field=document.createElement('input');field.type='hidden';field.name=key;field.value=String(value);form.appendChild(field);
+  });
+  document.body.appendChild(form);form.submit();
  }catch(error){
   paymentStatus.textContent=error.message;
   button.disabled=false;button.textContent=original;
