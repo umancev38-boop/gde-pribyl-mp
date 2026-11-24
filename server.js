@@ -99,9 +99,12 @@ async function initDb() {
       amount NUMERIC(12,2) NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       robokassa_invoice_id TEXT UNIQUE NOT NULL,
+      customer_token TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       paid_at TIMESTAMPTZ
     );
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_token TEXT;
+    CREATE INDEX IF NOT EXISTS payments_customer_token_idx ON payments(customer_token);
     CREATE TABLE IF NOT EXISTS subscriptions (
       id BIGSERIAL PRIMARY KEY,
       plan_code TEXT NOT NULL,
@@ -128,6 +131,10 @@ app.post("/api/payments/create", async (req, res) => {
     return res.status(503).json({ error: "Платежи пока не настроены на сервере." });
   }
   const planCode = String(req.body?.plan || "");
+  const customerToken = String(req.body?.customerToken || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(customerToken)) {
+    return res.status(400).json({ error: "Не удалось определить клиентскую сессию. Обнови страницу и повтори попытку." });
+  }
   const plan = plans[planCode];
   if (!plan || !Number.isFinite(Number(plan.amount)) || Number(plan.amount) <= 0 ||
       !Number.isInteger(Number(plan.days)) || Number(plan.days) < 1) {
@@ -139,8 +146,8 @@ app.post("/api/payments/create", async (req, res) => {
   try {
     const invoiceId = String(Date.now()) + String(crypto.randomInt(1000, 9999));
     await client.query(
-      "INSERT INTO payments(plan_code, amount, status, robokassa_invoice_id) VALUES($1,$2,'pending',$3)",
-      [planCode, amount, invoiceId]
+      "INSERT INTO payments(plan_code, amount, status, robokassa_invoice_id, customer_token) VALUES($1,$2,'pending',$3,$4)",
+      [planCode, amount, invoiceId, customerToken]
     );
 
     const params = {
@@ -149,10 +156,11 @@ app.post("/api/payments/create", async (req, res) => {
       InvId: invoiceId,
       Description: `Подписка Где прибыль МП: ${String(plan.label || planCode).slice(0, 80)}`,
       Culture: "ru",
-      Encoding: "utf-8"
+      Encoding: "utf-8",
+      Shp_customer: customerToken
     };
     if (TEST_MODE) params.IsTest = "1";
-    params.SignatureValue = paymentSignature(amount, invoiceId);
+    params.SignatureValue = paymentSignature(amount, invoiceId, { Shp_customer: customerToken });
 
     const query = new URLSearchParams(params);
     const paymentUrl = `https://auth.robokassa.ru/Merchant/Index.aspx?${query.toString()}`;
@@ -171,7 +179,8 @@ async function handleResult(req, res) {
   const invoiceId = String(params.InvId || "");
   const amount = String(params.OutSum || "");
   const signature = String(params.SignatureValue || "");
-  if (!/^\d+$/.test(invoiceId) || !/^\d+\.\d{2}$/.test(amount) ||
+  const customerToken = String(params.Shp_customer || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(customerToken) || !/^\d+$/.test(invoiceId) || !/^\d+\.\d{2}$/.test(amount) ||
       !safeEqual(resultSignature(params), signature)) {
     return res.status(400).send("BAD_SIGNATURE");
   }
@@ -188,6 +197,10 @@ async function handleResult(req, res) {
       return res.status(404).send("UNKNOWN_INVOICE");
     }
     const payment = found.rows[0];
+    if (payment.customer_token !== customerToken) {
+      await client.query("ROLLBACK");
+      return res.status(400).send("CUSTOMER_MISMATCH");
+    }
     if (Number(payment.amount).toFixed(2) !== Number(amount).toFixed(2)) {
       await client.query("ROLLBACK");
       return res.status(400).send("AMOUNT_MISMATCH");
@@ -220,14 +233,23 @@ async function handleResult(req, res) {
 }
 
 app.all("/api/robokassa/result", handleResult);
-app.get("/payment/success", (_req, res) => res.redirect(SITE_URL));
-app.get("/payment/fail", (_req, res) => res.redirect(SITE_URL));
+app.get("/payment/success", (_req, res) => res.redirect(`${SITE_URL}/?payment=return`));
+app.get("/payment/fail", (_req, res) => res.redirect(`${SITE_URL}/?payment=failed`));
 
-app.get("/api/subscription/status", async (_req, res) => {
+app.get("/api/subscription/status", async (req, res) => {
   if (!pool) return res.status(503).json({ error: "База данных не настроена." });
+  const customerToken = String(req.query.customerToken || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(customerToken)) {
+    return res.status(400).json({ error: "Некорректный идентификатор клиентской сессии." });
+  }
   try {
     const result = await pool.query(
-      "SELECT plan_code, expires_at FROM subscriptions WHERE expires_at > NOW() ORDER BY expires_at DESC LIMIT 1"
+      `SELECT s.plan_code, s.starts_at, s.expires_at
+       FROM subscriptions s
+       JOIN payments p ON p.id = s.payment_id
+       WHERE p.customer_token = $1 AND s.expires_at > NOW()
+       ORDER BY s.expires_at DESC LIMIT 1`,
+      [customerToken]
     );
     res.json({ subscription: result.rows[0] || null });
   } catch (error) {
