@@ -123,6 +123,9 @@ app.get("/health", (_req, res) => {
     version: "0.8.0",
     paymentsConfigured: configReady(),
     databaseConfigured: Boolean(pool),
+    merchantConfigured: Boolean(MERCHANT_LOGIN),
+    passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
+    plansConfigured: Object.keys(plans).length > 0,
     testMode: TEST_MODE
   });
 });
@@ -286,6 +289,15 @@ app.listen(PORT, async () => {
   try {
     await initDb();
     console.log(`Где прибыль МП API 0.8 listening on ${PORT}`);
+    console.log("Payment configuration:", JSON.stringify({
+      databaseConfigured: Boolean(pool),
+      merchantConfigured: Boolean(MERCHANT_LOGIN),
+      passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
+      plansConfigured: Object.keys(plans).length > 0,
+      planCodes: Object.keys(plans),
+      testMode: TEST_MODE,
+      hashAlgorithm: HASH_ALGORITHM
+    }));
   } catch (error) {
     console.error("Database initialization failed:", error.message);
     process.exit(1);
