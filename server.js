@@ -61,13 +61,13 @@ function sortedShp(params) {
     .sort((a, b) => a.localeCompare(b))
     .map((key) => `${key}=${params[key]}`);
 }
-function paymentSignature(amount, invoiceId, receipt, extraParams = {}) {
+function paymentSignature(amount, invoiceId, encodedReceipt, extraParams = {}) {
   const tail = sortedShp(extraParams);
   return digest([
     MERCHANT_LOGIN,
     amount,
     invoiceId,
-    encodeURIComponent(receipt),
+    encodedReceipt,
     PASSWORD_1,
     ...tail
   ].join(":"));
@@ -169,15 +169,15 @@ app.post("/api/payments/create", async (req, res) => {
       MerchantLogin: MERCHANT_LOGIN,
       OutSum: amount,
       InvId: invoiceId,
-      Description: `Подписка Где прибыль МП: ${String(plan.label || planCode).slice(0, 80)}`,
+      Description: `Подписка Где прибыль МП ${String(plan.label || planCode).slice(0, 80)}`,
       Email: email,
-      Receipt: receipt,
+      Receipt: encodeURIComponent(receipt),
       Culture: "ru",
       Encoding: "utf-8",
       Shp_customer: customerToken
     };
     if (TEST_MODE) params.IsTest = "1";
-    params.SignatureValue = paymentSignature(amount, invoiceId, receipt, { Shp_customer: customerToken });
+    params.SignatureValue = paymentSignature(amount, invoiceId, encodeURIComponent(receipt), { Shp_customer: customerToken });
 
     res.json({
       paymentUrl: "https://auth.robokassa.ru/Merchant/Index.aspx",
