@@ -32,7 +32,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 .tariffData{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 @media(max-width:760px){.tariffGrid{grid-template-columns:1fr}}
 
-.pricing{margin:20px 0}.pricingIntro{color:var(--muted);margin:-8px 0 16px;font-size:13px}.priceGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.priceCard{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fff}.priceCard h3{margin:0 0 5px;font-size:16px}.priceValue{font-size:25px;font-weight:850;letter-spacing:-.03em}.priceCard p{font-size:13px;color:var(--muted);margin:8px 0 0}.priceNote{font-size:12px;color:var(--muted);margin-top:12px}.legalLinks{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}.legalLinks a{color:#315b43;text-decoration:none;font-weight:650}.legalLinks a:hover{text-decoration:underline}
+.pricing{margin:20px 0}.pricingIntro{color:var(--muted);margin:-8px 0 16px;font-size:13px}.priceGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.priceCard{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fff}.priceCard h3{margin:0 0 5px;font-size:16px}.priceValue{font-size:25px;font-weight:850;letter-spacing:-.03em}.priceCard p{font-size:13px;color:var(--muted);margin:8px 0 0}.priceNote{font-size:12px;color:var(--muted);margin-top:12px}.legalLinks{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}.legalLinks a{color:#315b43;text-decoration:none;font-weight:650}.legalLinks a:hover{text-decoration:underline}.serviceDescription{margin:0 0 16px;padding:14px;background:#f5f8fa;border:1px solid var(--line);border-radius:12px}.serviceDescription p{font-size:13px;color:var(--muted);margin:6px 0}.consentRow{display:flex;gap:9px;align-items:flex-start;max-width:680px;margin:12px 0;font-size:12px;color:var(--muted)}.consentRow input{width:auto;margin-top:4px}.siteDetails{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted)}.siteDetails p{margin:4px 0}
 @media(max-width:760px){.priceGrid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -136,10 +136,11 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <p class="pricingIntro">Платная подписка действует 30 календарных дней с момента активации и не продлевается автоматически.</p>
 <div class="priceGrid">
 <article class="priceCard"><h3>FREE</h3><div class="priceValue">0 ₽</div><p>Базовый доступ к калькулятору прибыли и основным расчётам.</p></article>
-<article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Расширенный уровень доступа к аналитическим возможностям сервиса.</p><button type="button" data-pay-plan="pro">Оплатить PRO</button></article>
-<article class="priceCard"><h3>BUSINESS</h3><div class="priceValue">900 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Максимальный уровень доступа для продавцов с большим ассортиментом.</p><button type="button" data-pay-plan="business">Оплатить BUSINESS</button></article>
+<article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Доступ к текущему набору функций онлайн-сервиса на 30 календарных дней.</p><button type="button" data-pay-plan="pro">Оплатить PRO</button></article>
+<article class="priceCard"><h3>BUSINESS</h3><div class="priceValue">900 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Доступ к текущему набору функций онлайн-сервиса на 30 календарных дней.</p><button type="button" data-pay-plan="business">Оплатить BUSINESS</button></article>
 </div>
-<div class="field" style="max-width:420px;margin:0 0 14px"><label for="paymentEmail">E-mail для отправки чека</label><input id="paymentEmail" type="email" autocomplete="email" placeholder="name@example.com" required></div>
+<div class="field" style="max-width:420px;margin:0 0 14px"><label for="paymentEmail">E-mail для отправки чека и связи по заказу</label><input id="paymentEmail" type="email" autocomplete="email" placeholder="name@example.com" required></div>
+<label class="consentRow"><input id="paymentConsent" type="checkbox"><span>Я ознакомился(лась) с <a href="/legal.html#offer" target="_blank" rel="noopener">публичной офертой</a> и <a href="/legal.html#privacy" target="_blank" rel="noopener">политикой обработки персональных данных</a> и принимаю условия оферты при оплате.</span></label>
 <p class="priceNote">Состав функций выбранного тарифа указывается перед оформлением заказа. Автоматического списания за следующий период нет.</p>
 <div id="paymentStatus" class="status" role="status" aria-live="polite">Проверяем статус подписки…</div>
 <div class="legalLinks"><a href="/legal.html#offer">Публичная оферта</a><a href="/legal.html#refund">Возврат и отказ</a><a href="/legal.html#privacy">Политика персональных данных</a><a href="/legal.html#contacts">Контакты и реквизиты</a></div>
@@ -153,7 +154,9 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 </div>
 </section>
 </main>
-<footer>Где прибыль МП · Версия 0.8. Расчёты, товары и загруженные тарифные JSON хранятся локально в браузере. <a href="/legal.html#offer">Оферта</a> · <a href="/legal.html#refund">Возврат</a> · <a href="/legal.html#privacy">Персональные данные</a> · <a href="/legal.html#contacts">Контакты</a>.</footer>
+<footer>Где прибыль МП · Версия 0.8. Расчёты, товары и загруженные тарифные JSON хранятся локально в браузере.
+<div class="siteDetails"><p><b>Исполнитель:</b> самозанятый Уманцев Владислав Юрьевич</p><p><b>ИНН:</b> 263623054557 · <b>Город деятельности:</b> Ставрополь</p><p><b>E-mail:</b> <a href="mailto:Umancev38@gmail.com">Umancev38@gmail.com</a> · <b>Телефон:</b> <a href="tel:+79614436862">+7 961 443-68-62</a></p></div>
+<p><a href="/legal.html#offer">Публичная оферта</a> · <a href="/legal.html#service">Условия услуги</a> · <a href="/legal.html#refund">Возврат и отказ</a> · <a href="/legal.html#privacy">Политика персональных данных</a> · <a href="/legal.html#contacts">Реквизиты</a>.</p></footer>
 <script>
 const ids=['market','price','cost','commission','logistics','ads','other','storage','packaging','returns','tax','quantity'];
 const PRODUCT_KEY='gde_pribyl_mp_products_v04', HISTORY_KEY='gde_pribyl_mp_history_v04';
@@ -337,7 +340,7 @@ async function startPayment(planCode,button){
  const original=button.textContent;button.disabled=true;button.textContent='Создаём платёж…';
  try{
   const email=el('paymentEmail').value.trim();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Укажи корректный e-mail для чека.');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Укажи корректный e-mail для чека.');\n  if(!el('paymentConsent').checked)throw new Error('Перед оплатой ознакомься с офертой и политикой и отметь согласие.');
   const response=await fetch(PAYMENT_API+'/api/payments/create',{
    method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({plan:planCode,customerToken:getCustomerToken(),email})
