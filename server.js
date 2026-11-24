@@ -234,7 +234,7 @@ app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
   if(!pool) return res.status(503).json({error:"Регистрация временно недоступна."});
   const email=String(req.body?.email||"").trim().toLowerCase();
   const password=String(req.body?.password||"");
-  if(email.length>254||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({error:"Укажи корректный e-mail."});
+  if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:"Укажи корректный e-mail."});
   if(password.length<10||password.length>128) return res.status(400).json({error:"Пароль должен содержать от 10 до 128 символов."});
   try {
     const salt=crypto.randomBytes(16).toString("hex");
@@ -394,7 +394,7 @@ async function handleResult(req, res) {
   const amount = String(params.OutSum || "");
   const signature = String(params.SignatureValue || "");
   const userId = String(params.Shp_user || "");
-  if (!/^\\d+$/.test(userId) || !/^\\d+$/.test(invoiceId) || !/^\\d+\\.\\d{2}$/.test(amount) ||
+  if (!/^\d+$/.test(userId) || !/^\d+$/.test(invoiceId) || !/^\d+\.\d{2}$/.test(amount) ||
       !safeEqual(resultSignature(params), signature)) {
     return res.status(400).send("BAD_SIGNATURE");
   }
