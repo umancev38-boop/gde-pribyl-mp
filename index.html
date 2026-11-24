@@ -79,6 +79,11 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 </aside>
 </div>
 
+<section class="panel proFeature" id="targetPricePanel" aria-labelledby="targetPriceTitle">
+<h2 id="targetPriceTitle">Цена под целевую маржу · PRO</h2>
+<p class="recordsIntro">Укажи желаемую маржинальность. Сервис рассчитает цену продажи с учётом закупки, комиссии, налога и расходов на единицу.</p>
+<div id="targetPriceLockNotice" class="tariffStatus warn">Расчёт целевой цены доступен в PRO и BUSINESS.</div>
+<div id="targetPriceContent" hidden><div class="field"><label for="targetMargin">Целевая маржинальность, %</label><input id="targetMargin" type="number" min="0" max="90" step="0.5" value="20"></div><div class="result"><div id="targetPriceResult" class="profit">—</div><small id="targetPriceHint">Рекомендуемая цена продажи</small></div></div></section>
 <section class="panel tariffPanel" aria-labelledby="tariffTitle">
 <h2 id="tariffTitle">Тарифы Wildberries</h2>
 <p class="tariffIntro">Загрузи JSON-ответы официального WB API: комиссии по категориям и тарифы для коробов. Модуль выберет категорию и склад, рассчитает доставку и хранение по объёму и подставит значения в калькулятор.</p>
@@ -160,6 +165,17 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <div><h3>История расчётов</h3><div id="historyList" class="recordList"><p class="empty">Расчёты пока не сохранены.</p></div></div>
 </div>
 </section>
+<section class="panel businessFeature" id="businessPanel" aria-labelledby="businessTitle">
+<h2 id="businessTitle">Аналитика ассортимента · BUSINESS</h2>
+<p class="recordsIntro">Сводка по сохранённым товарам на этом устройстве. Это расчётный потенциал по введённым объёмам продаж, а не фактическая выручка маркетплейса.</p>
+<div id="businessLockNotice" class="tariffStatus warn">Сводная аналитика доступна в BUSINESS.</div>
+<div id="businessContent" hidden><div class="metrics">
+<div class="metric"><span>Товаров</span><strong id="portfolioCount">0</strong></div>
+<div class="metric"><span>Расчётная прибыль</span><strong id="portfolioProfit">0 ₽</strong></div>
+<div class="metric"><span>Расчётная выручка</span><strong id="portfolioRevenue">0 ₽</strong></div>
+<div class="metric"><span>Средняя маржинальность</span><strong id="portfolioMargin">—</strong></div></div>
+<div class="breakdown"><h3>Пять лидеров по расчётной прибыли</h3><div id="portfolioRanking" class="recordList"></div></div>
+<button id="exportPortfolioCsv" type="button">Экспорт ассортимента в CSV</button></div></section>
 </main>
 <footer>Где прибыль МП · Версия 0.9. Расчёты, товары и загруженные тарифные JSON хранятся локально в браузере.
 <div class="siteDetails"><p><b>Исполнитель:</b> самозанятый Уманцев Владислав Юрьевич</p><p><b>ИНН:</b> 263623054557 · <b>Город деятельности:</b> Ставрополь</p><p><b>E-mail:</b> <a href="mailto:Umancev38@gmail.com">Umancev38@gmail.com</a> · <b>Телефон:</b> <a href="tel:+79614436862">+7 961 443-68-62</a></p></div>
@@ -168,6 +184,10 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 const ids=['market','price','cost','commission','logistics','ads','other','storage','packaging','returns','tax','quantity'];
 const PRODUCT_KEY='gde_pribyl_mp_products_v04', HISTORY_KEY='gde_pribyl_mp_history_v04';
 const BACKUP_VERSION=1;
+let currentPlan='free';
+const PLAN_LIMITS={free:{products:5,history:20},pro:{products:100,history:500},business:{products:1000,history:5000}};
+const PLAN_RANK={free:0,pro:1,business:2};
+const hasPlan=plan=>PLAN_RANK[currentPlan]>=PLAN_RANK[plan];
 const readStore=key=>{try{return JSON.parse(localStorage.getItem(key)||'[]')}catch(e){return []}};
 const writeStore=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));return true}catch(e){alert('Не удалось сохранить данные. Проверь свободное место и настройки браузера.');return false}};
 const el=id=>document.getElementById(id);
@@ -200,8 +220,8 @@ function renderRecords(){
  if(!history.length)historyRoot.innerHTML='<p class="empty">Расчёты пока не сохранены.</p>';
  history.slice().reverse().forEach((item,reverseIndex)=>{const actualIndex=history.length-1-reverseIndex;const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=money(item.profit)+' / шт.';const sub=document.createElement('small');sub.textContent=item.market+' · '+new Date(item.savedAt).toLocaleString('ru-RU');info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(HISTORY_KEY);all.splice(actualIndex,1);if(writeStore(HISTORY_KEY,all))renderRecords()});actions.append(load,del);node.append(info,actions);historyRoot.append(node)});
 }
-el('saveProduct').addEventListener('click',()=>{const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const name=prompt('Название товара:');if(!name||!name.trim())return;const all=readStore(PRODUCT_KEY);all.push({...data,name:name.trim()});if(writeStore(PRODUCT_KEY,all)){renderRecords();el('saveProduct').textContent='Сохранено';setTimeout(()=>el('saveProduct').textContent='Сохранить товар',1400)}});
-el('saveCalc').addEventListener('click',()=>{const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const all=readStore(HISTORY_KEY);all.push(data);if(writeStore(HISTORY_KEY,all)){renderRecords();el('saveCalc').textContent='Добавлено';setTimeout(()=>el('saveCalc').textContent='В историю',1400)}});
+el('saveProduct').addEventListener('click',()=>{if(readStore(PRODUCT_KEY).length>=PLAN_LIMITS[currentPlan].products){alert('Лимит товаров тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const name=prompt('Название товара:');if(!name||!name.trim())return;const all=readStore(PRODUCT_KEY);all.push({...data,name:name.trim()});if(writeStore(PRODUCT_KEY,all)){renderRecords();el('saveProduct').textContent='Сохранено';setTimeout(()=>el('saveProduct').textContent='Сохранить товар',1400)}});
+el('saveCalc').addEventListener('click',()=>{if(readStore(HISTORY_KEY).length>=PLAN_LIMITS[currentPlan].history){alert('Лимит истории тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const all=readStore(HISTORY_KEY);all.push(data);if(writeStore(HISTORY_KEY,all)){renderRecords();el('saveCalc').textContent='Добавлено';setTimeout(()=>el('saveCalc').textContent='В историю',1400)}});
 el('exportData').addEventListener('click',()=>{
  const backup={app:'Где прибыль МП',backupVersion:BACKUP_VERSION,createdAt:new Date().toISOString(),products:readStore(PRODUCT_KEY),history:readStore(HISTORY_KEY)};
  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='gde-pribyl-mp-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);el('backupStatus').textContent='Резервная копия подготовлена. Проверь папку «Файлы» на iPhone.';
@@ -250,6 +270,7 @@ function refreshWBWarehouses(){
  select.disabled=false;
 }
 async function loadWBJson(inputId,kind){
+ if(!hasPlan('pro')){setWBStatus('Импорт тарифов Wildberries доступен в PRO и BUSINESS.',true);return}
  const file=el(inputId).files?.[0];if(!file)return;
  try{
   const data=JSON.parse(await file.text());
@@ -269,6 +290,7 @@ function updateWBApplyState(){
  el('applyWbTariffs').disabled=!(getWBReport(wbCommissions).length&&getWBWarehouses(wbBoxRates).length);
 }
 function applyWBTariffs(){
+ if(!hasPlan('pro')){setWBStatus('Импорт тарифов Wildberries доступен в PRO и BUSINESS.',true);return}
  const rows=getWBReport(wbCommissions),warehouses=getWBWarehouses(wbBoxRates);
  const chosen=rows.find(row=>String(row.subjectID??row.parentID)===el('wbCategory').value)||rows[0];
  const warehouse=warehouses[Number(el('wbWarehouse').value)];
@@ -314,6 +336,49 @@ try{
 
 calc();renderRecords();
 
+
+function updateTargetPrice(){
+ const target=Number(el('targetMargin').value),data=calc();
+ if(!hasPlan('pro'))return;
+ if(!data.valid||!Number.isFinite(target)||target<0||target>90){el('targetPriceResult').textContent='Проверь параметры';el('targetPriceHint').textContent='Цель должна быть от 0 до 90%';return}
+ const denominator=1-data.commission/100-data.tax/100-target/100;
+ if(denominator<=0){el('targetPriceResult').textContent='Невозможно рассчитать';el('targetPriceHint').textContent='Комиссия, налог и маржа должны быть меньше 100%';return}
+ const fixed=data.cost+data.logistics+data.ads+data.other+data.storage+data.packaging+data.returns;
+ el('targetPriceResult').textContent=money(fixed/denominator);
+ el('targetPriceHint').textContent='Цена для целевой маржи '+target.toLocaleString('ru-RU')+'% при текущих расходах.';
+}
+function renderBusinessDashboard(){
+ if(!hasPlan('business'))return;
+ const products=readStore(PRODUCT_KEY);
+ const revenue=products.reduce((sum,x)=>sum+(Number(x.price)||0)*(Number(x.quantity)||0),0);
+ const profit=products.reduce((sum,x)=>sum+(Number(x.total)||0),0);
+ el('portfolioCount').textContent=String(products.length);
+ el('portfolioProfit').textContent=money(profit);
+ el('portfolioRevenue').textContent=money(revenue);
+ el('portfolioMargin').textContent=revenue>0?(profit/revenue*100).toFixed(1).replace('.',',')+'%':'—';
+ const root=el('portfolioRanking');root.replaceChildren();
+ const top=products.slice().sort((a,b)=>(Number(b.total)||0)-(Number(a.total)||0)).slice(0,5);
+ if(!top.length){root.textContent='Сохрани товары, чтобы увидеть рейтинг.';return}
+ top.forEach((item,index)=>{const row=document.createElement('div');row.className='record';const name=document.createElement('strong');name.textContent=(index+1)+'. '+item.name;const value=document.createElement('b');value.textContent=money(Number(item.total)||0);row.append(name,value);root.append(row)});
+}
+function updatePlanUI(){
+ const pro=hasPlan('pro'),business=hasPlan('business');
+ el('targetPriceLockNotice').hidden=pro;el('targetPriceContent').hidden=!pro;
+ el('businessLockNotice').hidden=business;el('businessContent').hidden=!business;
+ if(pro)updateTargetPrice();
+ renderBusinessDashboard();
+}
+function exportPortfolioCsv(){
+ if(!hasPlan('business'))return;
+ const quote=x=>'"'+String(x??'').replace(/"/g,'""')+'"';
+ const rows=[['Товар','Площадка','Цена','Прибыль за единицу','Маржинальность','Количество','Расчётная прибыль'],...readStore(PRODUCT_KEY).map(x=>[x.name,x.market,x.price,x.profit,x.margin,x.quantity,x.total])];
+ const csv='\\ufeff'+rows.map(row=>row.map(quote).join(';')).join('\\r\\n');
+ const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');
+ link.href=url;link.download='gde-pribyl-assortment.csv';link.click();URL.revokeObjectURL(url);
+}
+el('targetMargin').addEventListener('input',updateTargetPrice);
+el('exportPortfolioCsv').addEventListener('click',exportPortfolioCsv);
+
 const PAYMENT_API='https://gde-pribyl-mp-api.onrender.com';
 const CUSTOMER_TOKEN_KEY='gde_pribyl_mp_customer_token_v1';
 function getCustomerToken(){
@@ -333,14 +398,16 @@ async function refreshSubscription(){
   const data=await response.json();
   if(!response.ok)throw new Error(data.error||'Не удалось проверить подписку');
   if(data.subscription){
-   const planName=data.subscription.plan_code==='business'?'BUSINESS':'PRO';
+   const code=String(data.subscription.plan_code||'').toLowerCase();currentPlan=code.includes('business')?'business':'pro';
+   const planName=currentPlan.toUpperCase();
    const expiry=new Date(data.subscription.expires_at).toLocaleString('ru-RU');
    paymentStatus.textContent='Активна подписка '+planName+'. Действует до '+expiry+'.';
   }else{
-   paymentStatus.textContent='Активной платной подписки пока нет.';
+   currentPlan='free';paymentStatus.textContent='Активной платной подписки пока нет. Используется FREE.';
   }
+  updatePlanUI();
  }catch(error){
-  paymentStatus.textContent='Статус подписки временно недоступен: '+error.message;
+  currentPlan='free';updatePlanUI();paymentStatus.textContent='Статус подписки временно недоступен: '+error.message;
  }
 }
 async function startPayment(planCode,button){
