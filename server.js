@@ -21,6 +21,35 @@ app.use((req, res, next) => {
   next();
 });
 
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 30;
+const rateBuckets = new Map();
+
+function rateLimit({ windowMs = RATE_LIMIT_WINDOW_MS, max = RATE_LIMIT_MAX } = {}) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = String(req.ip || req.socket.remoteAddress || "unknown");
+    let bucket = rateBuckets.get(key);
+    if (!bucket || now - bucket.startedAt >= windowMs) {
+      bucket = { startedAt: now, count: 0 };
+      rateBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      const retryAfter = Math.max(1, Math.ceil((windowMs - (now - bucket.startedAt)) / 1000));
+      res.setHeader("Retry-After", String(retryAfter));
+      return res.status(429).json({ error: "Слишком много запросов. Подожди немного и повтори." });
+    }
+    if (rateBuckets.size > 5000) {
+      for (const [bucketKey, value] of rateBuckets) {
+        if (now - value.startedAt >= windowMs) rateBuckets.delete(bucketKey);
+      }
+    }
+    next();
+  };
+}
+
 const PORT = Number(process.env.PORT || 3000);
 const SITE_URL = process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
 const MERCHANT_LOGIN = process.env.ROBOKASSA_MERCHANT_LOGIN || "";
@@ -130,7 +159,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.post("/api/payments/create", async (req, res) => {
+app.post("/api/payments/create", rateLimit({ max: 8 }), async (req, res) => {
   if (!configReady()) {
     return res.status(503).json({ error: "Платежи пока не настроены на сервере." });
   }
@@ -259,11 +288,12 @@ async function handleResult(req, res) {
   }
 }
 
-app.all("/api/robokassa/result", handleResult);
+app.post("/api/robokassa/result", handleResult);
 app.get("/payment/success", (_req, res) => res.redirect(`${SITE_URL}/?payment=return`));
 app.get("/payment/fail", (_req, res) => res.redirect(`${SITE_URL}/?payment=failed`));
 
-app.get("/api/subscription/status", async (req, res) => {
+app.get("/api/subscription/status", rateLimit({ max: 60 }), async (req, res) => {
+  res.setHeader("Cache-Control", "no-store, private");
   if (!pool) return res.status(503).json({ error: "База данных не настроена." });
   const customerToken = String(req.query.customerToken || "").toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(customerToken)) {
