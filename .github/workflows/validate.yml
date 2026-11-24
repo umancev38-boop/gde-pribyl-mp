@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [work/version-1-0-business-capacity]
+    branches: [work/version-1-0-business-capacity, fix/auth-db-smoke-and-entitlements]
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -14,6 +14,7 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run check
+      - run: npm test
       - name: Check inline browser JavaScript
         run: |
           python3 - <<'PY'
