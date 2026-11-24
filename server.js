@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import pg from "pg";
-import { PLAN_ENTITLEMENTS } from "./lib/entitlements.js";
+import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "./lib/entitlements.js";
 
 const { Pool } = pg;
 const app = express();
@@ -223,8 +223,7 @@ async function requireUser(req,res,next) {
 }
 async function accountPlan(userId) {
   const result=await pool.query("SELECT plan_code,expires_at FROM subscriptions WHERE user_id=$1 AND expires_at>NOW() ORDER BY expires_at DESC LIMIT 1",[userId]);
-  const code=String(result.rows[0]?.plan_code||"free").toLowerCase();
-  const plan=code.includes("business")?"business":code.includes("pro")?"pro":"free";
+  const plan=normalizePlanCode(result.rows[0]?.plan_code);
   return {plan,expiresAt:result.rows[0]?.expires_at||null,limits:PLAN_ENTITLEMENTS[plan]};
 }
 app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
@@ -296,7 +295,7 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
   if(!Array.isArray(products)||!Array.isArray(history)) return res.status(400).json({error:"Ожидаются массивы products и history."});
   try {
     const plan=await accountPlan(req.user.id);
-    if(products.length>plan.limits.products||history.length>plan.limits.history) return res.status(403).json({error:"Лимит тарифа превышен.",plan:plan.plan,limits:plan.limits});
+    if(!isWithinPlanLimits(plan.plan,products.length,history.length)) return res.status(403).json({error:"Лимит тарифа превышен.",plan:plan.plan,limits:plan.limits});
     if(Buffer.byteLength(JSON.stringify({products,history}),"utf8")>1800000) return res.status(413).json({error:"Размер данных превышает 1,8 МБ."});
     if([...products,...history].some(x=>!x||typeof x!=="object"||Array.isArray(x))) return res.status(400).json({error:"Некорректная запись данных."});
     const client=await pool.connect();
