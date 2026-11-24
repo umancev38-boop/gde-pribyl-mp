@@ -168,7 +168,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p><b>Для самостоятельного продавца</b></p><ul><li>До 200 сохранённых товаров</li><li>До 1 000 расчётов в истории</li><li>Расчёт цены под целевую маржу</li><li>Импорт JSON-тарифов Wildberries</li><li>Подробный расчёт точки безубыточности</li></ul><p>Точный расчёт экономики и цены каждого товара.</p><button type="button" data-pay-plan="pro">Оформить PRO</button></article>
 <article class="priceCard"><h3>BUSINESS</h3><div class="priceValue">900 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p><b>Для магазинов с широким ассортиментом</b></p><ul><li>До 5 000 сохранённых товаров</li><li>До 10 000 расчётов в истории</li><li>Все возможности PRO</li><li>Сводная аналитика ассортимента</li><li>Рейтинг товаров по расчётной прибыли</li><li>Экспорт ассортимента в CSV для Excel</li></ul><p>Контроль общей картины и поиск самых прибыльных товаров.</p><button type="button" data-pay-plan="business">Оформить BUSINESS</button></article>
 </div>
-<p class="priceNote">Лимиты товаров и истории применяются сервером. Облачная синхронизация доступна после входа в аккаунт. В BUSINESS предусмотрено до 5 рабочих мест; приглашения сотрудников будут добавлены отдельным этапом.</p>
+<p class="priceNote">Лимиты товаров и истории применяются сервером. Облачная синхронизация доступна после входа в аккаунт. В BUSINESS предусмотрено с расширенными лимитами для большой команды.</p>
 
 <label class="consentRow"><input id="paymentConsent" type="checkbox"><span>Я ознакомился(лась) с <a href="/legal.html#offer" target="_blank" rel="noopener">публичной офертой</a> и <a href="/legal.html#privacy" target="_blank" rel="noopener">политикой обработки персональных данных</a> и принимаю условия оферты при оплате.</span></label>
 <p class="priceNote">Все платные тарифы действуют 30 дней и не продлеваются автоматически.</p>
@@ -401,6 +401,7 @@ const API_URL='https://gde-pribyl-mp-api.onrender.com';
 const paymentStatus=el('paymentStatus');
 const accountStatus=el('accountStatus');
 let accountUser=null, accountLimits=PLAN_LIMITS.free, accountExpiry=null;
+let paymentsReady=false,paymentConfigMessage='Проверяем настройки Robokassa…',subscriptionMessage='';
 async function apiRequest(path,options={}){
  const headers={...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})};
  const response=await fetch(API_URL+path,{...options,headers,credentials:'include',cache:'no-store'});
@@ -419,19 +420,34 @@ function updateAuthUI(){
  el('accountMeta').textContent=signedIn
   ?'Выполнен вход: '+accountUser.email+'. Тариф: '+currentPlan.toUpperCase()+(accountExpiry?' · действует до '+new Date(accountExpiry).toLocaleDateString('ru-RU'):'')
   :'Не выполнен вход. Локальные данные остаются на этом устройстве.';
- document.querySelectorAll('[data-pay-plan]').forEach(button=>{button.disabled=!signedIn;button.title=signedIn?'':'Сначала войди в аккаунт.'});
+ document.querySelectorAll('[data-pay-plan]').forEach(button=>{button.disabled=!signedIn||!paymentsReady;button.title=!signedIn?'Сначала войди в аккаунт.':!paymentsReady?paymentConfigMessage:'Оформить подписку'});
+ paymentStatus.textContent=!paymentsReady?paymentConfigMessage:!signedIn?'Войди в аккаунт, чтобы оформить подписку.':(subscriptionMessage||'Можно оформить подписку.');
+}
+async function checkPaymentConfig(){
+ try{
+  const health=await apiRequest('/health');
+  paymentsReady=health.paymentsConfigured===true&&health.testMode!==true;
+  paymentConfigMessage=health.paymentsConfigured!==true
+   ?'Реальная оплата временно отключена: Robokassa ещё не полностью настроена на сервере.'
+   :health.testMode===true
+    ?'Robokassa работает в тестовом режиме. Реальные платежи пока отключены.'
+    :'';
+ }catch(error){
+  paymentsReady=false;paymentConfigMessage='Не удалось проверить настройки Robokassa. Оплата временно отключена.';
+ }
+ updateAuthUI();
 }
 async function refreshSubscription(){
  try{
   const data=await apiRequest('/api/auth/me');
   accountUser=data.user;currentPlan=['free','pro','business'].includes(data.plan)?data.plan:'free';
   accountLimits=data.limits||PLAN_LIMITS[currentPlan];accountExpiry=data.expiresAt||null;
-  paymentStatus.textContent=data.plan==='free'?'Активен тариф FREE.':'Активна подписка '+currentPlan.toUpperCase()+'. Действует до '+new Date(accountExpiry).toLocaleString('ru-RU')+'.';
+  subscriptionMessage=data.plan==='free'?'Активен тариф FREE.':'Активна подписка '+currentPlan.toUpperCase()+'. Действует до '+new Date(accountExpiry).toLocaleString('ru-RU')+'.';
  }catch(error){
   accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;
   if(/Войди в аккаунт|Сессия завершена/i.test(error.message))setAccountStatus('Войди или создай аккаунт. Локальные данные не затронуты.');
   else setAccountStatus('Сервер аккаунтов временно недоступен: '+error.message,true);
-  paymentStatus.textContent='Для оформления подписки войди в аккаунт.';
+  subscriptionMessage='Для оформления подписки войди в аккаунт.';
  }
  updateAuthUI();updatePlanUI();
 }
@@ -484,6 +500,7 @@ async function startPayment(planCode,button){
  const original=button.textContent;button.disabled=true;button.textContent='Создаём платёж…';
  try{
   if(!accountUser)throw new Error('Сначала войди в аккаунт.');
+  if(!paymentsReady)throw new Error(paymentConfigMessage);
   if(!el('paymentConsent').checked)throw new Error('Перед оплатой ознакомься с офертой и политикой и отметь согласие.');
   const data=await apiRequest('/api/payments/create',{method:'POST',body:JSON.stringify({plan:planCode})});
   if(!data.paymentUrl||!data.paymentParams)throw new Error('Параметры платежа не получены.');
@@ -498,6 +515,7 @@ document.querySelectorAll('[data-pay-plan]').forEach(button=>button.addEventList
 const paymentReturn=new URLSearchParams(location.search).get('payment');
 if(paymentReturn==='failed')paymentStatus.textContent='Платёж не завершён. Подписка не активирована.';
 else if(paymentReturn==='return')paymentStatus.textContent='Проверяем подтверждение платежа от Robokassa…';
+checkPaymentConfig();
 refreshSubscription();
 if(paymentReturn==='return'){
  let attempts=0;
