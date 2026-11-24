@@ -414,7 +414,8 @@ async function startPayment(planCode,button){
  const original=button.textContent;button.disabled=true;button.textContent='Создаём платёж…';
  try{
   const email=el('paymentEmail').value.trim();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Укажи корректный e-mail для чека.');\n  if(!el('paymentConsent').checked)throw new Error('Перед оплатой ознакомься с офертой и политикой и отметь согласие.');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Укажи корректный e-mail для чека.');
+  if(!el('paymentConsent').checked)throw new Error('Перед оплатой ознакомься с офертой и политикой и отметь согласие.');
   const response=await fetch(PAYMENT_API+'/api/payments/create',{
    method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({plan:planCode,customerToken:getCustomerToken(),email})
