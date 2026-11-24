@@ -14,7 +14,7 @@ app.use((req, res, next) => {
   if (origin === FRONTEND_ORIGIN) {
     res.setHeader("Access-Control-Allow-Origin", FRONTEND_ORIGIN);
     res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("Access-Control-Allow-Credentials", "true");
   }
@@ -231,6 +231,7 @@ async function accountPlan(userId) {
   return {plan,expiresAt:result.rows[0]?.expires_at||null,limits:PLAN_ENTITLEMENTS[plan]};
 }
 app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
+  if(!pool) return res.status(503).json({error:"Регистрация временно недоступна."});
   const email=String(req.body?.email||"").trim().toLowerCase();
   const password=String(req.body?.password||"");
   if(email.length>254||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({error:"Укажи корректный e-mail."});
@@ -390,8 +391,8 @@ async function handleResult(req, res) {
   const invoiceId = String(params.InvId || "");
   const amount = String(params.OutSum || "");
   const signature = String(params.SignatureValue || "");
-  const customerToken = String(params.Shp_customer || "").toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(customerToken) || !/^\d+$/.test(invoiceId) || !/^\d+\.\d{2}$/.test(amount) ||
+  const userId = String(params.Shp_user || "");
+  if (!/^\\d+$/.test(userId) || !/^\\d+$/.test(invoiceId) || !/^\\d+\\.\\d{2}$/.test(amount) ||
       !safeEqual(resultSignature(params), signature)) {
     return res.status(400).send("BAD_SIGNATURE");
   }
