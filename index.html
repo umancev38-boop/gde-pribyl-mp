@@ -426,12 +426,16 @@ function updateAuthUI(){
 async function checkPaymentConfig(){
  try{
   const health=await apiRequest('/health');
-  paymentsReady=health.paymentsConfigured===true&&health.testMode!==true;
+  const pro=health.planSummary?.pro,business=health.planSummary?.business;
+  const pricesMatch=Number(pro?.amount)===499&&Number(business?.amount)===900&&Number(pro?.days)===30&&Number(business?.days)===30;
+  paymentsReady=health.paymentsConfigured===true&&health.testMode!==true&&pricesMatch;
   paymentConfigMessage=health.paymentsConfigured!==true
    ?'Реальная оплата временно отключена: Robokassa ещё не полностью настроена на сервере.'
    :health.testMode===true
     ?'Robokassa работает в тестовом режиме. Реальные платежи пока отключены.'
-    :'';
+    :!pricesMatch
+     ?'Оплата отключена: серверные цены или сроки тарифов не совпадают с опубликованными условиями.'
+     :'';
  }catch(error){
   paymentsReady=false;paymentConfigMessage='Не удалось проверить настройки Robokassa. Оплата временно отключена.';
  }
