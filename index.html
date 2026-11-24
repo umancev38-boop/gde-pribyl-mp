@@ -136,10 +136,11 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <p class="pricingIntro">Платная подписка действует 30 календарных дней с момента активации и не продлевается автоматически.</p>
 <div class="priceGrid">
 <article class="priceCard"><h3>FREE</h3><div class="priceValue">0 ₽</div><p>Базовый доступ к калькулятору прибыли и основным расчётам.</p></article>
-<article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Расширенный уровень доступа к аналитическим возможностям сервиса.</p></article>
-<article class="priceCard"><h3>BUSINESS</h3><div class="priceValue">900 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Максимальный уровень доступа для продавцов с большим ассортиментом.</p></article>
+<article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Расширенный уровень доступа к аналитическим возможностям сервиса.</p><button type="button" data-pay-plan="pro">Оплатить PRO</button></article>
+<article class="priceCard"><h3>BUSINESS</h3><div class="priceValue">900 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Максимальный уровень доступа для продавцов с большим ассортиментом.</p><button type="button" data-pay-plan="business">Оплатить BUSINESS</button></article>
 </div>
 <p class="priceNote">Состав функций выбранного тарифа указывается перед оформлением заказа. Автоматического списания за следующий период нет.</p>
+<div id="paymentStatus" class="status" role="status" aria-live="polite">Проверяем статус подписки…</div>
 <div class="legalLinks"><a href="/legal.html#offer">Публичная оферта</a><a href="/legal.html#refund">Возврат и отказ</a><a href="/legal.html#privacy">Политика персональных данных</a><a href="/legal.html#contacts">Контакты и реквизиты</a></div>
 </section>
 <section class="panel records" aria-labelledby="recordsTitle">
@@ -301,6 +302,67 @@ try{
 }catch(e){setWBStatus('Сохранённые данные тарифов повреждены. Загрузи JSON-файлы заново.',true)}
 
 calc();renderRecords();
+
+const PAYMENT_API='https://gde-pribyl-mp-api.onrender.com';
+const CUSTOMER_TOKEN_KEY='gde_pribyl_mp_customer_token_v1';
+function getCustomerToken(){
+ let token=localStorage.getItem(CUSTOMER_TOKEN_KEY);
+ if(!/^[a-f0-9]{64}$/.test(token||'')){
+  const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);
+  token=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+  localStorage.setItem(CUSTOMER_TOKEN_KEY,token);
+ }
+ return token;
+}
+const paymentStatus=el('paymentStatus');
+async function refreshSubscription(){
+ try{
+  const token=getCustomerToken();
+  const response=await fetch(PAYMENT_API+'/api/subscription/status?customerToken='+encodeURIComponent(token));
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||'Не удалось проверить подписку');
+  if(data.subscription){
+   const planName=data.subscription.plan_code==='business'?'BUSINESS':'PRO';
+   const expiry=new Date(data.subscription.expires_at).toLocaleString('ru-RU');
+   paymentStatus.textContent='Активна подписка '+planName+'. Действует до '+expiry+'.';
+  }else{
+   paymentStatus.textContent='Активной платной подписки пока нет.';
+  }
+ }catch(error){
+  paymentStatus.textContent='Статус подписки временно недоступен: '+error.message;
+ }
+}
+async function startPayment(planCode,button){
+ const original=button.textContent;button.disabled=true;button.textContent='Создаём платёж…';
+ try{
+  const response=await fetch(PAYMENT_API+'/api/payments/create',{
+   method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({plan:planCode,customerToken:getCustomerToken()})
+  });
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||'Не удалось создать платёж');
+  if(!data.paymentUrl)throw new Error('Платёжная ссылка не получена');
+  window.location.assign(data.paymentUrl);
+ }catch(error){
+  paymentStatus.textContent=error.message;
+  button.disabled=false;button.textContent=original;
+ }
+}
+document.querySelectorAll('[data-pay-plan]').forEach(button=>{
+ button.addEventListener('click',()=>startPayment(button.dataset.payPlan,button));
+});
+const paymentReturn=new URLSearchParams(location.search).get('payment');
+if(paymentReturn==='failed')paymentStatus.textContent='Платёж не завершён. Подписка не активирована.';
+else if(paymentReturn==='return')paymentStatus.textContent='Проверяем подтверждение платежа от Robokassa…';
+refreshSubscription();
+if(paymentReturn==='return'){
+ let attempts=0;
+ const poll=setInterval(async()=>{
+  attempts++;await refreshSubscription();
+  if(paymentStatus.textContent.startsWith('Активна подписка')||attempts>=8)clearInterval(poll);
+ },2000);
+}
+
 // iPhone: страница остаётся обычным сайтом; добавление на экран «Домой» даёт быстрый запуск, но не синхронизирует данные между устройствами.
 </script>
 </body>
