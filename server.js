@@ -61,12 +61,13 @@ function sortedShp(params) {
     .sort((a, b) => a.localeCompare(b))
     .map((key) => `${key}=${params[key]}`);
 }
-function paymentSignature(amount, invoiceId, extraParams = {}) {
+function paymentSignature(amount, invoiceId, receipt, extraParams = {}) {
   const tail = sortedShp(extraParams);
   return digest([
     MERCHANT_LOGIN,
     amount,
     invoiceId,
+    encodeURIComponent(receipt),
     PASSWORD_1,
     ...tail
   ].join(":"));
@@ -132,8 +133,12 @@ app.post("/api/payments/create", async (req, res) => {
   }
   const planCode = String(req.body?.plan || "");
   const customerToken = String(req.body?.customerToken || "").toLowerCase();
+  const email = String(req.body?.email || "").trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(customerToken)) {
     return res.status(400).json({ error: "Не удалось определить клиентскую сессию. Обнови страницу и повтори попытку." });
+  }
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Укажи корректный e-mail для отправки чека." });
   }
   const plan = plans[planCode];
   if (!plan || !Number.isFinite(Number(plan.amount)) || Number(plan.amount) <= 0 ||
@@ -150,21 +155,34 @@ app.post("/api/payments/create", async (req, res) => {
       [planCode, amount, invoiceId, customerToken]
     );
 
+    const itemName = `Подписка Где прибыль МП ${String(plan.label || planCode).slice(0, 70)}`.slice(0, 128);
+    const receipt = JSON.stringify({
+      items: [{
+        name: itemName,
+        quantity: 1,
+        sum: Number(amount),
+        payment_object: "service",
+        tax: "none"
+      }]
+    });
     const params = {
       MerchantLogin: MERCHANT_LOGIN,
       OutSum: amount,
       InvId: invoiceId,
       Description: `Подписка Где прибыль МП: ${String(plan.label || planCode).slice(0, 80)}`,
+      Email: email,
+      Receipt: receipt,
       Culture: "ru",
       Encoding: "utf-8",
       Shp_customer: customerToken
     };
     if (TEST_MODE) params.IsTest = "1";
-    params.SignatureValue = paymentSignature(amount, invoiceId, { Shp_customer: customerToken });
+    params.SignatureValue = paymentSignature(amount, invoiceId, receipt, { Shp_customer: customerToken });
 
-    const query = new URLSearchParams(params);
-    const paymentUrl = `https://auth.robokassa.ru/Merchant/Index.aspx?${query.toString()}`;
-    res.json({ paymentUrl });
+    res.json({
+      paymentUrl: "https://auth.robokassa.ru/Merchant/Index.aspx",
+      paymentParams: params
+    });
   } catch (error) {
     console.error("Payment creation failed:", error.message);
     res.status(500).json({ error: "Не удалось создать платёж." });
@@ -217,8 +235,14 @@ async function handleResult(req, res) {
       );
       await client.query(
         `INSERT INTO subscriptions(plan_code, starts_at, expires_at, payment_id)
-         VALUES($1, NOW(), NOW() + ($2::int * INTERVAL '1 day'), $3)`,
-        [payment.plan_code, Number(plan.days), payment.id]
+         SELECT $1, start_at, start_at + ($2::int * INTERVAL '1 day'), $3
+         FROM (
+           SELECT GREATEST(NOW(), COALESCE(MAX(s.expires_at), NOW())) AS start_at
+           FROM subscriptions s
+           JOIN payments p ON p.id = s.payment_id
+           WHERE p.customer_token = $4
+         ) active_period`,
+        [payment.plan_code, Number(plan.days), payment.id, customerToken]
       );
     }
     await client.query("COMMIT");
