@@ -112,13 +112,14 @@ function resultSignature(params) {
   ].join(":"));
 }
 function configReady() {
-  return Boolean(
-    pool &&
-    MERCHANT_LOGIN &&
-    PASSWORD_1 &&
-    PASSWORD_2 &&
-    ALLOWED_HASHES.has(HASH_ALGORITHM)
-  );
+  const requiredPlans = ["pro", "business"];
+  const plansReady = requiredPlans.every((code) => {
+    const plan = plans[code];
+    return plan && Number.isFinite(Number(plan.amount)) && Number(plan.amount) > 0 &&
+      Number.isInteger(Number(plan.days)) && Number(plan.days) >= 1;
+  });
+  return Boolean(pool && MERCHANT_LOGIN && PASSWORD_1 && PASSWORD_2 &&
+    ALLOWED_HASHES.has(HASH_ALGORITHM) && plansReady);
 }
 
 async function initDb() {
@@ -163,7 +164,6 @@ async function initDb() {
     ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_token TEXT;
     ALTER TABLE payments ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id);
     CREATE INDEX IF NOT EXISTS payments_user_idx ON payments(user_id);
-    CREATE INDEX IF NOT EXISTS payments_customer_token_idx ON payments(customer_token);
     CREATE INDEX IF NOT EXISTS payments_customer_token_idx ON payments(customer_token);
     CREATE TABLE IF NOT EXISTS subscriptions (
       id BIGSERIAL PRIMARY KEY,
@@ -249,6 +249,7 @@ app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
   }
 });
 app.post("/api/auth/login",rateLimit({max:10}),sameOrigin,async(req,res)=>{
+  if(!pool) return res.status(503).json({error:"Вход временно недоступен."});
   const email=String(req.body?.email||"").trim().toLowerCase();
   const password=String(req.body?.password||"");
   if(email.length>254||password.length>128) return res.status(400).json({error:"Проверь e-mail и пароль."});
@@ -300,8 +301,8 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
       await client.query("BEGIN");
       await client.query("DELETE FROM user_products WHERE user_id=$1",[req.user.id]);
       await client.query("DELETE FROM user_history WHERE user_id=$1",[req.user.id]);
-      for(const item of products) await client.query("INSERT INTO user_products(user_id,data) VALUES($1,$2::jsonb)",[req.user.id,JSON.stringify(item)]);
-      for(const item of history) await client.query("INSERT INTO user_history(user_id,data) VALUES($1,$2::jsonb)",[req.user.id,JSON.stringify(item)]);
+      if(products.length) await client.query("INSERT INTO user_products(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(products)]);
+      if(history.length) await client.query("INSERT INTO user_history(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(history)]);
       await client.query("COMMIT");
     } catch(error) { await client.query("ROLLBACK").catch(()=>{});throw error; }
     finally { client.release(); }
@@ -323,7 +324,8 @@ app.get("/health", (_req, res) => {
     merchantConfigured: Boolean(MERCHANT_LOGIN),
     passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
     plansConfigured: Object.keys(plans).length > 0,
-    testMode: TEST_MODE
+    testMode: TEST_MODE,
+    planSummary: Object.fromEntries(Object.entries(plans).map(([code, plan]) => [code, { amount: Number(plan.amount), days: Number(plan.days), label: String(plan.label || code) }]))
   });
 });
 
