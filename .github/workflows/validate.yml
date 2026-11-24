@@ -1,0 +1,28 @@
+name: Validate application
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [work/version-1-0-business-capacity]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run check
+      - name: Check inline browser JavaScript
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script>([\s\S]*?)</script>", html)
+          if len(scripts) != 1:
+              raise SystemExit(f"Expected one inline script, found {len(scripts)}")
+          Path("/tmp/site-inline.js").write_text(scripts[0], encoding="utf-8")
+          PY
+          node --check /tmp/site-inline.js

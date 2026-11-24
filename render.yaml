@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: gde-pribyl-mp
+    runtime: static
+    repo: https://github.com/umancev38-boop/gde-pribyl-mp
+    branch: main
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://gde-pribyl-mp-api.onrender.com/api/*
+      - type: rewrite
+        source: /health
+        destination: https://gde-pribyl-mp-api.onrender.com/health
