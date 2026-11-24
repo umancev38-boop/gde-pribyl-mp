@@ -132,8 +132,14 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 </section>
 
 <section class="panel pricing" aria-labelledby="pricingTitle">
-<h2 id="pricingTitle">Тарифы сервиса</h2>
-<p class="pricingIntro">Платная подписка действует 30 календарных дней с момента активации и не продлевается автоматически.</p>
+<h2 id="pricingTitle">Онлайн-сервис «Где прибыль МП»</h2>
+<div class="serviceDescription">
+<p><b>Что это:</b> цифровой онлайн-инструмент для продавцов маркетплейсов. Помогает оценить экономику товара до продажи и контролировать основные статьи расходов.</p>
+<p><b>Возможности текущей версии:</b> расчёт прибыли и маржинальности; учёт закупки, комиссии площадки, логистики, рекламы, хранения, упаковки, возвратов и налога; расчёт точки безубыточности; сохранение товаров и истории расчётов; резервное копирование и восстановление данных; ручная загрузка JSON-тарифов Wildberries. Для Ozon и других площадок параметры вводятся вручную.</p>
+<p><b>Получение услуги:</b> доступ предоставляется дистанционно на сайте. После подтверждения оплаты Robokassa платный доступ активируется на 30 календарных дней. Физическая доставка не требуется.</p>
+<p><b>Продление:</b> автоматического списания нет. Следующий период оплачивается пользователем самостоятельно.</p>
+</div>
+<p class="pricingIntro">Стоимость доступа на 30 календарных дней: PRO — 499 ₽; BUSINESS — 900 ₽. В версии 0.8 оба платных тарифа открывают доступ к текущему набору функций сервиса; отдельные функциональные лимиты между ними пока не установлены.</p>
 <div class="priceGrid">
 <article class="priceCard"><h3>FREE</h3><div class="priceValue">0 ₽</div><p>Базовый доступ к калькулятору прибыли и основным расчётам.</p></article>
 <article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p>Доступ к текущему набору функций онлайн-сервиса на 30 календарных дней.</p><button type="button" data-pay-plan="pro">Оплатить PRO</button></article>
@@ -141,7 +147,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 </div>
 <div class="field" style="max-width:420px;margin:0 0 14px"><label for="paymentEmail">E-mail для отправки чека и связи по заказу</label><input id="paymentEmail" type="email" autocomplete="email" placeholder="name@example.com" required></div>
 <label class="consentRow"><input id="paymentConsent" type="checkbox"><span>Я ознакомился(лась) с <a href="/legal.html#offer" target="_blank" rel="noopener">публичной офертой</a> и <a href="/legal.html#privacy" target="_blank" rel="noopener">политикой обработки персональных данных</a> и принимаю условия оферты при оплате.</span></label>
-<p class="priceNote">Состав функций выбранного тарифа указывается перед оформлением заказа. Автоматического списания за следующий период нет.</p>
+<p class="priceNote">PRO и BUSINESS в текущей версии отличаются стоимостью подписки, а не набором функций. Подписка не продлевается автоматически.</p>
 <div id="paymentStatus" class="status" role="status" aria-live="polite">Проверяем статус подписки…</div>
 <div class="legalLinks"><a href="/legal.html#offer">Публичная оферта</a><a href="/legal.html#refund">Возврат и отказ</a><a href="/legal.html#privacy">Политика персональных данных</a><a href="/legal.html#contacts">Контакты и реквизиты</a></div>
 </section>
