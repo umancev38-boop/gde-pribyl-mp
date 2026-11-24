@@ -372,7 +372,7 @@ function exportPortfolioCsv(){
  if(!hasPlan('business'))return;
  const quote=x=>'"'+String(x??'').replace(/"/g,'""')+'"';
  const rows=[['Товар','Площадка','Цена','Прибыль за единицу','Маржинальность','Количество','Расчётная прибыль'],...readStore(PRODUCT_KEY).map(x=>[x.name,x.market,x.price,x.profit,x.margin,x.quantity,x.total])];
- const csv='\\ufeff'+rows.map(row=>row.map(quote).join(';')).join('\\r\\n');
+ const csv='\ufeff'+rows.map(row=>row.map(quote).join(';')).join('\r\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');
  link.href=url;link.download='gde-pribyl-assortment.csv';link.click();URL.revokeObjectURL(url);
 }
