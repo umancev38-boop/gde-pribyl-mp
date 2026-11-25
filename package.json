@@ -1,6 +1,6 @@
 {
   "name": "gde-pribyl-mp",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Backend API for Где прибыль МП",
   "type": "module",

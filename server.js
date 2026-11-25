@@ -321,7 +321,7 @@ app.get("/health", async (_req, res) => {
   const healthy=Boolean(pool)&&databaseHealthy;
   res.setHeader("Cache-Control","no-store");
   res.status(healthy?200:503).json({
-    ok: healthy, version: "1.0.0-auth-stage", accountsConfigured: Boolean(pool), serverSideQuotas: true,
+    ok: healthy, version: "1.0.0", accountsConfigured: Boolean(pool), serverSideQuotas: true,
     paymentsConfigured: configReady(), databaseConfigured: Boolean(pool), databaseHealthy,
     merchantConfigured: Boolean(MERCHANT_LOGIN), passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
     plansConfigured: Object.keys(plans).length > 0, testMode: TEST_MODE, entitlements: PLAN_ENTITLEMENTS,
@@ -487,7 +487,7 @@ app.listen(PORT, async () => {
     await initDb();
     await verifyDbRoundTrip();
     console.log("PostgreSQL read/write smoke test passed (transaction rolled back)");
-    console.log(`Где прибыль МП API 1.0 listening on ${PORT}`);
+    console.log(`Где прибыль МП API 1.0.0 listening on ${PORT}`);
     console.log("Payment configuration:", JSON.stringify({
       databaseConfigured: Boolean(pool),
       merchantConfigured: Boolean(MERCHANT_LOGIN),
