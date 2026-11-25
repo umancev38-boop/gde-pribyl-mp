@@ -434,14 +434,22 @@ async function loadMarketplaceCredentials(userId, marketplace) {
   );
   if (!found.rowCount) return null;
   const row = found.rows[0];
-  return decryptCredentials({ ciphertext: row.encrypted_credentials, nonce: row.nonce, authTag: row.auth_tag }, parseEncryptionKey());
+  return {
+    credentials: decryptCredentials({ ciphertext: row.encrypted_credentials, nonce: row.nonce, authTag: row.auth_tag }, parseEncryptionKey()),
+    encryptedCredentials: row.encrypted_credentials,
+    nonce: row.nonce,
+    authTag: row.auth_tag
+  };
 }
-async function syncMarketplace(userId, marketplace, credentials) {
-  const snapshot = await fetchMarketplaceSnapshot(marketplace, credentials);
-  await pool.query(
-    "UPDATE marketplace_integrations SET snapshot=$3::jsonb,last_synced_at=NOW(),last_error=NULL,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2",
-    [userId, marketplace, JSON.stringify(snapshot)]
+async function syncMarketplace(userId, marketplace, credentialRecord) {
+  const snapshot = await fetchMarketplaceSnapshot(marketplace, credentialRecord.credentials);
+  const updated = await pool.query(
+    "UPDATE marketplace_integrations SET snapshot=$4::jsonb,last_synced_at=NOW(),last_error=NULL,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2 AND encrypted_credentials=$3 AND nonce=$5 AND auth_tag=$6",
+    [userId, marketplace, credentialRecord.encryptedCredentials, JSON.stringify(snapshot), credentialRecord.nonce, credentialRecord.authTag]
   );
+  if (!updated.rowCount) {
+    throw new MarketplaceApiError("Ключи маркетплейса изменились во время обновления. Повтори синхронизацию.", 409);
+  }
   return snapshot;
 }
 
@@ -490,15 +498,19 @@ app.put("/api/marketplaces/:marketplace/credentials", rateLimit({ max: 5 }), req
 
 app.post("/api/marketplaces/:marketplace/refresh", rateLimit({ max: 5 }), requireUser, sameOrigin, requirePaidMarketplacePlan, marketplaceParam, async (req, res) => {
   const marketplace = req.params.marketplace;
+  let credentialRecord = null;
   try {
-    const credentials = await loadMarketplaceCredentials(req.user.id, marketplace);
-    if (!credentials) return res.status(404).json({ error: "Этот маркетплейс ещё не подключён." });
-    const snapshot = await syncMarketplace(req.user.id, marketplace, credentials);
+    credentialRecord = await loadMarketplaceCredentials(req.user.id, marketplace);
+    if (!credentialRecord) return res.status(404).json({ error: "Этот маркетплейс ещё не подключён." });
+    const snapshot = await syncMarketplace(req.user.id, marketplace, credentialRecord);
     res.setHeader("Cache-Control", "no-store, private");
     res.json({ connected: true, marketplace, snapshot });
   } catch (error) {
-    if (error instanceof MarketplaceApiError) {
-      await pool.query("UPDATE marketplace_integrations SET last_error=$3,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2", [req.user.id, marketplace, error.message]).catch(() => {});
+    if (error instanceof MarketplaceApiError && credentialRecord) {
+      await pool.query(
+        "UPDATE marketplace_integrations SET last_error=$6,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2 AND encrypted_credentials=$3 AND nonce=$4 AND auth_tag=$5",
+        [req.user.id, marketplace, credentialRecord.encryptedCredentials, credentialRecord.nonce, credentialRecord.authTag, error.message]
+      ).catch(() => {});
     }
     return marketplaceError(res, error);
   }
