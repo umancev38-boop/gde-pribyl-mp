@@ -154,6 +154,11 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS user_history_user_idx ON user_history(user_id);
+    CREATE TABLE IF NOT EXISTS user_data_versions (
+      user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      version BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS marketplace_integrations (
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       marketplace TEXT NOT NULL CHECK (marketplace IN ('wildberries','ozon')),
@@ -297,32 +302,48 @@ app.get("/api/account/data",requireUser,async(req,res)=>{
       pool.query("SELECT data FROM user_history WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
       accountPlan(req.user.id)
     ]);
+    await pool.query("INSERT INTO user_data_versions(user_id,version) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING",[req.user.id]);
+    const version=await pool.query("SELECT version FROM user_data_versions WHERE user_id=$1",[req.user.id]);
     res.setHeader("Cache-Control","no-store, private");
-    res.json({products:products.rows.map(x=>x.data),history:history.rows.map(x=>x.data),...plan});
+    res.json({products:products.rows.map(x=>x.data),history:history.rows.map(x=>x.data),version:Number(version.rows[0].version),...plan});
   } catch(error) {
     console.error("Account data read failed:",error.message);
     res.status(500).json({error:"Не удалось загрузить данные аккаунта."});
   }
 });
 app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
-  const products=req.body?.products,history=req.body?.history;
+  const products=req.body?.products,history=req.body?.history,expectedVersion=req.body?.expectedVersion;
   if(!Array.isArray(products)||!Array.isArray(history)) return res.status(400).json({error:"Ожидаются массивы products и history."});
+  if(!Number.isSafeInteger(expectedVersion)||expectedVersion<0) return res.status(400).json({error:"Ожидается корректная версия данных expectedVersion."});
   try {
     const plan=await accountPlan(req.user.id);
     if(!isWithinPlanLimits(plan.plan,products.length,history.length)) return res.status(403).json({error:"Лимит тарифа превышен.",plan:plan.plan,limits:plan.limits});
     if(Buffer.byteLength(JSON.stringify({products,history}),"utf8")>1800000) return res.status(413).json({error:"Размер данных превышает 1,8 МБ."});
     if([...products,...history].some(x=>!x||typeof x!=="object"||Array.isArray(x))) return res.status(400).json({error:"Некорректная запись данных."});
     const client=await pool.connect();
+    let conflictVersion=null,versionConflict=false;
     try {
       await client.query("BEGIN");
-      await client.query("DELETE FROM user_products WHERE user_id=$1",[req.user.id]);
-      await client.query("DELETE FROM user_history WHERE user_id=$1",[req.user.id]);
-      if(products.length) await client.query("INSERT INTO user_products(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(products)]);
-      if(history.length) await client.query("INSERT INTO user_history(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(history)]);
-      await client.query("COMMIT");
+      await client.query("INSERT INTO user_data_versions(user_id,version) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING",[req.user.id]);
+      const current=await client.query("SELECT version FROM user_data_versions WHERE user_id=$1 FOR UPDATE",[req.user.id]);
+      const currentVersion=Number(current.rows[0].version);
+      if(currentVersion!==expectedVersion) {
+        conflictVersion=currentVersion;
+        versionConflict=true;
+        await client.query("ROLLBACK");
+      } else {
+        await client.query("DELETE FROM user_products WHERE user_id=$1",[req.user.id]);
+        await client.query("DELETE FROM user_history WHERE user_id=$1",[req.user.id]);
+        if(products.length) await client.query("INSERT INTO user_products(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(products)]);
+        if(history.length) await client.query("INSERT INTO user_history(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(history)]);
+        const updated=await client.query("UPDATE user_data_versions SET version=version+1,updated_at=NOW() WHERE user_id=$1 RETURNING version",[req.user.id]);
+        await client.query("COMMIT");
+        conflictVersion=Number(updated.rows[0].version);
+      }
     } catch(error) { await client.query("ROLLBACK").catch(()=>{});throw error; }
     finally { client.release(); }
-    res.json({saved:true,productCount:products.length,historyCount:history.length,plan:plan.plan,limits:plan.limits});
+    if(versionConflict) return res.status(409).json({error:"Данные изменились на другом устройстве. Загрузи актуальную версию и повтори синхронизацию.",code:"SYNC_VERSION_CONFLICT",currentVersion:conflictVersion});
+    res.json({saved:true,version:conflictVersion,productCount:products.length,historyCount:history.length,plan:plan.plan,limits:plan.limits});
   } catch(error) {
     console.error("Account data save failed:",error.message);
     res.status(500).json({error:"Не удалось сохранить данные аккаунта."});
