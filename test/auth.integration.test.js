@@ -138,10 +138,13 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
 
     const products = Array.from({ length: 5 }, (_, i) => ({ id: "p" + i, name: "Test product " + i }));
     const history = Array.from({ length: 20 }, (_, i) => ({ id: "h" + i, profit: i }));
+    const initialData = await request("/api/account/data", { headers: { Cookie: "gpm_session=" + firstCookie } });
+    assert.equal(initialData.status, 200);
+    const initialVersion = (await initialData.json()).version;
     const save = await request("/api/account/data", {
       method: "PUT",
       headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
-      body: JSON.stringify({ products, history })
+      body: JSON.stringify({ products, history, expectedVersion: initialVersion })
     });
     assert.equal(save.status, 200);
     assert.equal((await save.json()).saved, true);
@@ -155,18 +158,29 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     assert.equal(savedData.history.length, 20);
     assert.deepEqual(savedData.products, products);
     assert.deepEqual(savedData.history, history);
+    assert.equal(savedData.version, 1);
+
+    const staleWrite = await request("/api/account/data", {
+      method: "PUT",
+      headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
+      body: JSON.stringify({ products: [{ id: "stale", name: "Stale overwrite" }], history, expectedVersion: 0 })
+    });
+    assert.equal(staleWrite.status, 409, "a stale device version must not overwrite newer cloud data");
+    assert.equal((await staleWrite.json()).code, "SYNC_VERSION_CONFLICT");
+    const afterConflict = await request("/api/account/data", { headers: { Cookie: "gpm_session=" + firstCookie } });
+    assert.deepEqual((await afterConflict.json()).products, products, "a rejected stale write must preserve the latest data");
 
     const tooManyProducts = await request("/api/account/data", {
       method: "PUT",
       headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
-      body: JSON.stringify({ products: [...products, { id: "overflow" }], history })
+      body: JSON.stringify({ products: [...products, { id: "overflow" }], history, expectedVersion: 1 })
     });
     assert.equal(tooManyProducts.status, 403);
 
     const tooMuchHistory = await request("/api/account/data", {
       method: "PUT",
       headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
-      body: JSON.stringify({ products, history: [...history, { id: "overflow" }] })
+      body: JSON.stringify({ products, history: [...history, { id: "overflow" }], expectedVersion: 1 })
     });
     assert.equal(tooMuchHistory.status, 403);
 
