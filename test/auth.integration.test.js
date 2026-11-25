@@ -333,7 +333,7 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
 test("marketplace refresh writes are conditional on the exact credential version", () => {
   const server = readFileSync(new URL("../server.js", import.meta.url), "utf8");
   assert.match(server, /async function syncMarketplace\(userId, marketplace, credentialRecord\)/);
-  assert.match(server, /WHERE user_id=\\$1 AND marketplace=\\$2 AND encrypted_credentials=\\$3 AND nonce=\\$5 AND auth_tag=\\$6/);
+  assert.match(server, /WHERE user_id=\$1 AND marketplace=\$2 AND encrypted_credentials=\$3 AND nonce=\$5 AND auth_tag=\$6/);
   assert.match(server, /Ключи маркетплейса изменились во время обновления/);
-  assert.match(server, /SET last_error=\\$6,updated_at=NOW\\(\\) WHERE user_id=\\$1 AND marketplace=\\$2 AND encrypted_credentials=\\$3 AND nonce=\\$4 AND auth_tag=\\$5/);
+  assert.match(server, /SET last_error=\$6,updated_at=NOW\\(\\) WHERE user_id=\$1 AND marketplace=\$2 AND encrypted_credentials=\$3 AND nonce=\$4 AND auth_tag=\$5/);
 });
