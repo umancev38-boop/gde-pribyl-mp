@@ -22,7 +22,7 @@ test("Ozon splits price requests into batches of at most 1000 product IDs", asyn
 
 test("Ozon repeated price cursor fails instead of returning an incomplete snapshot", async () => {
   let priceCalls = 0;
-  const error = await assert.rejects(
+  await assert.rejects(
     fetchMarketplaceSnapshot("ozon", credentials, async (url, options) => {
       const body = JSON.parse(options.body);
       if (url.endsWith("/v3/product/list")) {
@@ -34,7 +34,6 @@ test("Ozon repeated price cursor fails instead of returning an incomplete snapsh
     /повторяющийся курсор цен/
   );
   assert.equal(priceCalls, 2);
-  assert.ok(error instanceof Error);
 });
 
 test("Ozon empty catalogue does not issue price requests", async () => {
