@@ -1,0 +1,30 @@
+{
+  "response": {
+    "data": {
+      "currency": "RUB",
+      "dtNextBox": "2026-12-01",
+      "warehouseList": [
+        {
+          "warehouseName": "Коледино",
+          "geoName": "Центр",
+          "boxDeliveryBase": "50",
+          "boxDeliveryLiter": "10",
+          "boxStorageBase": "1.2",
+          "boxStorageLiter": "0.2",
+          "boxDeliveryMarketplaceBase": "0",
+          "boxDeliveryMarketplaceLiter": "0"
+        },
+        {
+          "warehouseName": "Электросталь",
+          "geoName": "Центр",
+          "boxDeliveryBase": "55",
+          "boxDeliveryLiter": "11",
+          "boxStorageBase": "1.3",
+          "boxStorageLiter": "0.25",
+          "boxDeliveryMarketplaceBase": "0",
+          "boxDeliveryMarketplaceLiter": "0"
+        }
+      ]
+    }
+  }
+}

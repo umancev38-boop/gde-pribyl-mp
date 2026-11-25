@@ -1,0 +1,18 @@
+[
+  {
+    "subjectID": 101,
+    "parentID": 10,
+    "parentName": "Дом и кухня",
+    "subjectName": "Посуда",
+    "kgvpMarketplace": "15.5",
+    "kgvpSupplier": "18.0"
+  },
+  {
+    "subjectID": 102,
+    "parentID": 10,
+    "parentName": "Дом и кухня",
+    "subjectName": "Хранение",
+    "kgvpMarketplace": "17.0",
+    "kgvpSupplier": "19.5"
+  }
+]

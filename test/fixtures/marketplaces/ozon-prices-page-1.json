@@ -1,0 +1,21 @@
+{
+  "result": {
+    "items": [
+      {
+        "product_id": 700001,
+        "offer_id": "DEMO-001",
+        "price": {
+          "price": "1290",
+          "currency_code": "RUB"
+        },
+        "commissions": {
+          "sales_percent_fbo": 15.5,
+          "sales_percent_fbs": 17.5,
+          "fbo_deliv_to_customer_amount": 82.5,
+          "fbo_fulfillment_amount": 43.2
+        }
+      }
+    ],
+    "cursor": "synthetic-prices-2"
+  }
+}
