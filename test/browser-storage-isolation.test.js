@@ -36,7 +36,7 @@ test("backup restore validates size, shape, quotas and calculator values before 
   assert.match(html, /item\.values\[id\]\.length<=100/);
 });
 
-test("backup restore rolls back both local datasets if either storage write fails", () => {
+test("backup restore rolls back all local datasets if any storage write fails", () => {
   const restore = html.slice(html.indexOf("el('importData').addEventListener"), html.indexOf("function mergeUnique"));
   assert.ok(restore.indexOf("previousProducts=localStorage.getItem(PRODUCT_KEY)") < restore.indexOf("localStorage.setItem(PRODUCT_KEY,JSON.stringify(data.products))"));
   assert.ok(restore.indexOf("localStorage.setItem(PRODUCT_KEY,JSON.stringify(data.products))") < restore.indexOf("localStorage.setItem(HISTORY_KEY,JSON.stringify(data.history))"));
