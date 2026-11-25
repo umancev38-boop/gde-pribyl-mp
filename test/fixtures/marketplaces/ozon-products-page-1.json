@@ -1,0 +1,15 @@
+{
+  "result": {
+    "items": [
+      {
+        "product_id": 700001,
+        "offer_id": "DEMO-001"
+      },
+      {
+        "product_id": 700002,
+        "offer_id": "DEMO-002"
+      }
+    ],
+    "last_id": "synthetic-cursor-2"
+  }
+}
