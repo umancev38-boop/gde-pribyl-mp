@@ -326,3 +326,5 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     await Promise.race([new Promise(resolve => child.once("exit", resolve)), wait(3000)]);
   }
 });
+
+// Regression coverage for tenant-scoped tombstones and stable legacy record IDs.
