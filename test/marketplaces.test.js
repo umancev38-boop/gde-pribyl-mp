@@ -41,21 +41,44 @@ test("Wildberries snapshot is normalized and contains only tariff fields", async
   assert.equal("token" in result.warehouses[0], false);
 });
 
-test("Ozon snapshot reads products then commissions through the current prices endpoint", async () => {
+test("Ozon snapshot paginates the full product catalogue and prices", async () => {
   const calls = [];
   const fetcher = async (url, options) => {
-    calls.push({ url, body: JSON.parse(options.body) });
+    const body = JSON.parse(options.body);
+    calls.push({ url, body });
     return {
       ok: true, status: 200,
-      json: async () => url.endsWith("/v3/product/list")
-        ? { result: { items: [{ product_id: 987, offer_id: "SKU-1" }] } }
-        : { items: [{ product_id: 987, offer_id: "SKU-1", price: { price: "1290", currency_code: "RUB" }, commissions: { sales_percent_fbo: 15, fbo_deliv_to_customer_amount: 80, internal: "drop" } }] }
+      json: async () => {
+        if (url.endsWith("/v3/product/list")) {
+          return body.last_id === ""
+            ? { result: { items: [{ product_id: 987, offer_id: "SKU-1" }, { product_id: 988, offer_id: "SKU-2" }], last_id: "page-2" } }
+            : { result: { items: [{ product_id: 989, offer_id: "SKU-3" }], last_id: "" } };
+        }
+        return body.cursor === ""
+          ? { items: [{ product_id: 987, offer_id: "SKU-1", price: { price: "1290", currency_code: "RUB" }, commissions: { sales_percent_fbo: 15, fbo_deliv_to_customer_amount: 80, internal: "drop" } }], cursor: "prices-page-2" }
+          : { items: [{ product_id: 988, offer_id: "SKU-2", price: { price: "990", currency_code: "RUB" }, commissions: { sales_percent_fbo: 12 } }, { product_id: 989, offer_id: "SKU-3", price: { price: "1590", currency_code: "RUB" }, commissions: { sales_percent_fbo: 17 } }], cursor: "" };
+      }
     };
   };
   const result = await fetchMarketplaceSnapshot("ozon", { clientId: "123", apiKey: "x".repeat(24) }, fetcher);
-  assert.equal(calls.length, 2);
-  assert.match(calls[1].url, /v5\/product\/info\/prices$/);
-  assert.equal(calls[1].body.filter.product_id[0], "987");
+  assert.equal(calls.length, 4);
+  assert.equal(calls[0].body.limit, 1000);
+  assert.equal(calls[1].body.last_id, "page-2");
+  assert.deepEqual(calls[2].body.filter.product_id, ["987", "988", "989"]);
+  assert.equal(calls[3].body.cursor, "prices-page-2");
+  assert.equal(result.products, 3);
+  assert.equal(result.items.length, 3);
   assert.equal(result.items[0].commissions.salesPercentFbo, 15);
   assert.equal("internal" in result.items[0].commissions, false);
+});
+
+test("Ozon pagination rejects a repeated product cursor instead of saving partial data", async () => {
+  const fetcher = async () => ({
+    ok: true, status: 200,
+    json: async () => ({ result: { items: [{ product_id: 1 }], last_id: "stuck" } })
+  });
+  await assert.rejects(
+    fetchMarketplaceSnapshot("ozon", { clientId: "123", apiKey: "x".repeat(24) }, fetcher),
+    /повторяющийся курсор/
+  );
 });
