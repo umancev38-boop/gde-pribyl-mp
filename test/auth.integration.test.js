@@ -73,7 +73,33 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     const marketplaceAccess = await request("/api/marketplaces", {
       headers: { Cookie: "gpm_session=" + firstCookie }
     });
+
     assert.equal(marketplaceAccess.status, 403, "FREE plan must not access marketplace integrations");
+
+    for (const provider of ["wildberries", "ozon"]) {
+      const credentials = provider === "wildberries"
+        ? { token: "synthetic-wb-token-that-is-never-sent" }
+        : { clientId: "123456", apiKey: "synthetic-ozon-key-that-is-never-sent" };
+      const connect = await request("/api/marketplaces/" + provider + "/credentials", {
+        method: "PUT",
+        headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
+        body: JSON.stringify(credentials)
+      });
+      assert.equal(connect.status, 403, "FREE plan must not connect " + provider);
+
+      const refresh = await request("/api/marketplaces/" + provider + "/refresh", {
+        method: "POST",
+        headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
+        body: "{}"
+      });
+      assert.equal(refresh.status, 403, "FREE plan must not refresh " + provider);
+
+      const disconnect = await request("/api/marketplaces/" + provider, {
+        method: "DELETE",
+        headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie }
+      });
+      assert.equal(disconnect.status, 403, "FREE plan must not call " + provider + " integration routes");
+    }
 
     assert.equal(me.status, 200);
     assert.equal((await me.json()).user.email, email);
