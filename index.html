@@ -572,7 +572,7 @@ function marketplaceLabel(provider){return provider==='wildberries'?'Wildberries
 function marketplaceSnapshotLabel(provider,snapshot){
  if(!snapshot)return 'Подключён. Данные ещё не обновлялись.';
  if(provider==='wildberries')return 'Подключён · категорий: '+(snapshot.categories?.length||0)+', складов: '+(snapshot.warehouses?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
- return 'Подключён · проверена первая страница каталога (до 100 товаров): '+(snapshot.products||0)+', строк с комиссиями: '+(snapshot.items?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
+ return 'Подключён · товаров в каталоге: '+(snapshot.products||0)+', строк с комиссиями: '+(snapshot.items?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
 }
 function renderOzonSnapshot(snapshot){
  const node=el('ozonTariffDetails');
