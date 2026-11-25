@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import pg from "pg";
 import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "../lib/entitlements.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -28,6 +29,7 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
   });
 
   let logs = "";
+  let testPool;
   child.stdout.on("data", chunk => { logs += chunk.toString(); });
   child.stderr.on("data", chunk => { logs += chunk.toString(); });
 
@@ -177,7 +179,64 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     const restored = await afterLogin.json();
     assert.deepEqual(restored.products, products);
     assert.deepEqual(restored.history, history);
+
+    // Verify marketplace records are isolated by user_id, even for two paid accounts.
+    testPool = new pg.Pool({ connectionString: databaseUrl });
+    const activatePro = async userId => {
+      const payment = await testPool.query(
+        "INSERT INTO payments(plan_code,amount,status,robokassa_invoice_id,user_id) VALUES('pro',0,'paid',$1,$2) RETURNING id",
+        ["integration-" + randomUUID(), userId]
+      );
+      await testPool.query(
+        "INSERT INTO subscriptions(plan_code,starts_at,expires_at,payment_id,user_id) VALUES('pro',NOW(),NOW()+INTERVAL '30 days',$1,$2)",
+        [payment.rows[0].id, userId]
+      );
+    };
+    await activatePro(registrationData.user.id);
+
+    const otherRegistration = await request("/api/auth/register", {
+      method: "POST",
+      headers: originHeader,
+      body: JSON.stringify({ email: "integration-" + randomUUID() + "@example.test", password })
+    });
+    assert.equal(otherRegistration.status, 201);
+    const otherRegistrationData = await otherRegistration.json();
+    const otherCookie = otherRegistration.headers.get("set-cookie")?.match(/gpm_session=([^;]+)/)?.[1];
+    assert.ok(otherCookie);
+    await activatePro(otherRegistrationData.user.id);
+
+    const privateSnapshot = { fetchedAt: "synthetic-test", products: 1, items: [{ productId: "700001", offerId: "PRIVATE-DEMO" }] };
+    await testPool.query(
+      "INSERT INTO marketplace_integrations(user_id,marketplace,encrypted_credentials,nonce,auth_tag,snapshot,last_synced_at) VALUES($1,'ozon','synthetic-ciphertext','synthetic-nonce','synthetic-tag',$2::jsonb,NOW())",
+      [registrationData.user.id, JSON.stringify(privateSnapshot)]
+    );
+
+    const ownerConnections = await request("/api/marketplaces", {
+      headers: { Cookie: "gpm_session=" + secondCookie }
+    });
+    assert.equal(ownerConnections.status, 200);
+    assert.deepEqual((await ownerConnections.json()).connections.ozon.snapshot, privateSnapshot);
+
+    const otherConnections = await request("/api/marketplaces", {
+      headers: { Cookie: "gpm_session=" + otherCookie }
+    });
+    assert.equal(otherConnections.status, 200);
+    assert.deepEqual((await otherConnections.json()).connections, {}, "another PRO user must not see the owner's marketplace record");
+
+    const otherDisconnect = await request("/api/marketplaces/ozon", {
+      method: "DELETE",
+      headers: { ...originHeader, Cookie: "gpm_session=" + otherCookie }
+    });
+    assert.equal(otherDisconnect.status, 200);
+
+    const ownerAfterOtherDisconnect = await request("/api/marketplaces", {
+      headers: { Cookie: "gpm_session=" + secondCookie }
+    });
+    assert.equal(ownerAfterOtherDisconnect.status, 200);
+    assert.equal((await ownerAfterOtherDisconnect.json()).connections.ozon.connected, true,
+      "another user must not be able to disconnect the owner's marketplace");
   } finally {
+    await testPool?.end();
     child.kill("SIGTERM");
     await Promise.race([new Promise(resolve => child.once("exit", resolve)), wait(3000)]);
   }
