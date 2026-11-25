@@ -286,8 +286,8 @@ const parseWBNumber=value=>{
  const n=Number(String(value).replace(/\s/g,'').replace(',','.').replace('%',''));
  return Number.isFinite(n)?n:0;
 };
-const getWBReport=data=>Array.isArray(data)?data:(Array.isArray(data?.report)?data.report:[]);
-const getWBWarehouses=data=>data?.response?.data?.warehouseList||data?.data?.warehouseList||[];
+const getWBReport=data=>Array.isArray(data)?data:(Array.isArray(data?.report)?data.report:(Array.isArray(data?.categories)?data.categories:[]));
+const getWBWarehouses=data=>data?.response?.data?.warehouseList||data?.data?.warehouseList||data?.warehouses||[];
 function setWBStatus(message,isWarn=true){
  const node=el('wbTariffStatus');node.textContent=message;node.className='tariffStatus'+(isWarn?' warn':'');
 }
@@ -327,6 +327,12 @@ async function loadWBJson(inputId,kind){
   setWBStatus('Данные '+(kind==='commission'?'комиссий':'тарифов складов')+' загружены из файла «'+file.name+'». Проверь категорию, склад и схему продаж.',false);
  }catch(error){setWBStatus('Не удалось прочитать файл: '+error.message,true)}
  finally{el(inputId).value=''}
+}
+function hydrateWbApiSnapshot(snapshot){
+ if(!snapshot||!Array.isArray(snapshot.categories)||!Array.isArray(snapshot.warehouses))return;
+ wbCommissions={categories:snapshot.categories};wbBoxRates={warehouses:snapshot.warehouses};
+ refreshWBCategories();refreshWBWarehouses();updateWBApplyState();
+ setWBStatus('Тарифы получены напрямую через Wildberries API: '+snapshot.categories.length+' категорий и '+snapshot.warehouses.length+' складов. Выбери категорию и склад, затем подставь тарифы.',false);
 }
 function updateWBApplyState(){
  el('applyWbTariffs').disabled=!(getWBReport(wbCommissions).length&&getWBWarehouses(wbBoxRates).length);
@@ -590,6 +596,7 @@ async function loadMarketplaceConnections(){
   const data=await apiRequest('/api/marketplaces');
   marketplaceState.wildberries=data.connections?.wildberries||null;
   marketplaceState.ozon=data.connections?.ozon||null;
+  if(marketplaceState.wildberries?.snapshot)hydrateWbApiSnapshot(marketplaceState.wildberries.snapshot);
   renderMarketplaceState();
  }catch(error){
   el('marketplaceSummary').textContent=error.message;
@@ -605,7 +612,7 @@ async function connectMarketplace(provider){
  try{
   const data=await apiRequest('/api/marketplaces/'+provider+'/credentials',{method:'PUT',body:JSON.stringify(body)});
   marketplaceState[provider]={connected:true,snapshot:data.snapshot};
-  if(isWb)el('wbApiToken').value='';else{el('ozonClientId').value='';el('ozonApiKey').value=''}
+  if(isWb){el('wbApiToken').value='';hydrateWbApiSnapshot(data.snapshot)}else{el('ozonClientId').value='';el('ozonApiKey').value=''}
   renderMarketplaceState();
  }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
  finally{button.disabled=false;button.textContent=isWb?'Подключить WB':'Подключить Ozon'}
@@ -615,7 +622,7 @@ async function refreshMarketplace(provider){
  button.disabled=true;button.textContent='Обновляем…';
  try{
   const data=await apiRequest('/api/marketplaces/'+provider+'/refresh',{method:'POST',body:'{}'});
-  marketplaceState[provider]={connected:true,snapshot:data.snapshot};renderMarketplaceState();
+  marketplaceState[provider]={connected:true,snapshot:data.snapshot};if(isWb)hydrateWbApiSnapshot(data.snapshot);renderMarketplaceState();
  }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
  finally{button.disabled=false;button.textContent=isWb?'Обновить тарифы':'Обновить данные'}
 }
