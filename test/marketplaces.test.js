@@ -153,3 +153,23 @@ test("Ozon rejects structurally incomplete price pages instead of returning part
     );
   }
 });
+
+
+test("Wildberries rejects malformed tariff row collections without leaking TypeErrors", async () => {
+  const cases = [
+    { commissions: [null], warehouses: [{ warehouseName: "Коледино" }] },
+    { commissions: [{ subjectID: 1, subjectName: "Посуда" }], warehouses: { warehouseName: "Коледино" } },
+    { commissions: [{ subjectID: 1, subjectName: "Посуда" }], warehouses: [null] }
+  ];
+  for (const payload of cases) {
+    await assert.rejects(
+      fetchMarketplaceSnapshot("wildberries", { token: "x".repeat(24) }, async url => ({
+        ok: true, status: 200,
+        json: async () => url.includes("/commission")
+          ? payload.commissions
+          : { response: { data: { warehouseList: payload.warehouses } } }
+      })),
+      /некорректную структуру тарифов/
+    );
+  }
+});
