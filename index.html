@@ -618,16 +618,26 @@ async function syncAccount(){
  if(!accountUser)return setAccountStatus('Сначала войди в аккаунт.',true);
  const button=el('syncAccount');button.disabled=true;button.textContent='Синхронизация…';
  try{
-  const cloud=await apiRequest('/api/account/data');
-  const products=mergeUnique(readStore(PRODUCT_KEY),cloud.products||[]);
-  const history=mergeUnique(readStore(HISTORY_KEY),cloud.history||[]);
-  if(products.length>accountLimits.products||history.length>accountLimits.history){
-   throw new Error('После объединения получится '+products.length+' товаров и '+history.length+' расчётов. Лимиты тарифа: '+accountLimits.products+' и '+accountLimits.history+'. Данные не изменены.');
+  let cloud=await apiRequest('/api/account/data');
+  let products,history,saved;
+  for(let attempt=0;attempt<3;attempt++){
+   products=mergeUnique(readStore(PRODUCT_KEY),cloud.products||[]);
+   history=mergeUnique(readStore(HISTORY_KEY),cloud.history||[]);
+   if(products.length>accountLimits.products||history.length>accountLimits.history){
+    throw new Error('После объединения получится '+products.length+' товаров и '+history.length+' расчётов. Лимиты тарифа: '+accountLimits.products+' и '+accountLimits.history+'. Данные не изменены.');
+   }
+   try{
+    saved=await apiRequest('/api/account/data',{method:'PUT',body:JSON.stringify({products,history,expectedVersion:cloud.version})});
+    break;
+   }catch(error){
+    if(error.status!==409||attempt===2)throw error;
+    cloud=await apiRequest('/api/account/data');
+   }
   }
-  const saved=await apiRequest('/api/account/data',{method:'PUT',body:JSON.stringify({products,history})});
+  if(!saved)throw new Error('Данные часто меняются на другом устройстве. Повтори синхронизацию через несколько секунд.');
   if(!writeStore(PRODUCT_KEY,products)||!writeStore(HISTORY_KEY,history))throw new Error('Облако сохранено, но локальное хранилище не обновилось. Перезагрузи страницу и повтори синхронизацию.');
   renderRecords();renderBusinessDashboard();
-  setAccountStatus('Синхронизация завершена. Товаров: '+saved.productCount+', расчётов: '+saved.historyCount+'. Данные объединены без удаления записей.');
+  setAccountStatus('Синхронизация завершена. Товаров: '+saved.productCount+', расчётов: '+saved.historyCount+'. Версия облака: '+saved.version+'.');
  }catch(error){setAccountStatus(error.message,true)}
  finally{button.disabled=false;button.textContent='Синхронизировать данные'}
 }
