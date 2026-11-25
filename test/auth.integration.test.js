@@ -338,3 +338,17 @@ test("marketplace refresh writes are conditional on the exact credential version
   assert.ok(server.includes("Ключи маркетплейса изменились во время обновления"));
   assert.ok(server.includes("SET last_error=$6,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2 AND encrypted_credentials=$3 AND nonce=$4 AND auth_tag=$5"));
 });
+
+
+test("account data reads use one read-only repeatable-read snapshot", () => {
+  const server = readFileSync(new URL("../server.js", import.meta.url), "utf8");
+  const route = server.slice(server.indexOf('app.get("/api/account/data"'), server.indexOf('app.put("/api/account/data"'));
+  assert.ok(route.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
+  assert.ok(route.includes('client.query("SELECT data FROM user_products'));
+  assert.ok(route.includes('client.query("SELECT data FROM user_history'));
+  assert.ok(route.includes('client.query("SELECT version FROM user_data_versions'));
+  assert.ok(route.includes('client.query("SELECT record_id FROM user_data_tombstones'));
+  assert.ok(route.includes('client.query("COMMIT")'));
+  assert.ok(!route.includes('UPDATE user_products'));
+  assert.ok(!route.includes('UPDATE user_history'));
+});
