@@ -321,7 +321,7 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
     if(Buffer.byteLength(JSON.stringify({products,history}),"utf8")>1800000) return res.status(413).json({error:"Размер данных превышает 1,8 МБ."});
     if([...products,...history].some(x=>!x||typeof x!=="object"||Array.isArray(x))) return res.status(400).json({error:"Некорректная запись данных."});
     const client=await pool.connect();
-    let conflictVersion=null;
+    let conflictVersion=null,versionConflict=false;
     try {
       await client.query("BEGIN");
       await client.query("INSERT INTO user_data_versions(user_id,version) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING",[req.user.id]);
@@ -329,6 +329,7 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
       const currentVersion=Number(current.rows[0].version);
       if(currentVersion!==expectedVersion) {
         conflictVersion=currentVersion;
+        versionConflict=true;
         await client.query("ROLLBACK");
       } else {
         await client.query("DELETE FROM user_products WHERE user_id=$1",[req.user.id]);
@@ -341,7 +342,7 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
       }
     } catch(error) { await client.query("ROLLBACK").catch(()=>{});throw error; }
     finally { client.release(); }
-    if(conflictVersion===null||conflictVersion===expectedVersion) return res.status(409).json({error:"Данные изменились на другом устройстве. Загрузи актуальную версию и повтори синхронизацию.",code:"SYNC_VERSION_CONFLICT",currentVersion:conflictVersion});
+    if(versionConflict) return res.status(409).json({error:"Данные изменились на другом устройстве. Загрузи актуальную версию и повтори синхронизацию.",code:"SYNC_VERSION_CONFLICT",currentVersion:conflictVersion});
     res.json({saved:true,version:conflictVersion,productCount:products.length,historyCount:history.length,plan:plan.plan,limits:plan.limits});
   } catch(error) {
     console.error("Account data save failed:",error.message);
