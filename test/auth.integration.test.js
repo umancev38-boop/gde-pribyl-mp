@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "../lib/entitlements.js";
@@ -328,3 +329,12 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
 });
 
 // Regression coverage for tenant-scoped tombstones and stable legacy record IDs.
+
+
+test("marketplace refresh writes are conditional on the exact credential version", () => {
+  const server = readFileSync(new URL("../server.js", import.meta.url), "utf8");
+  assert.match(server, /async function syncMarketplace\(userId, marketplace, credentialRecord\)/);
+  assert.match(server, /WHERE user_id=\$1 AND marketplace=\$2 AND encrypted_credentials=\$3 AND nonce=\$5 AND auth_tag=\$6/);
+  assert.match(server, /Ключи маркетплейса изменились во время обновления/);
+  assert.match(server, /SET last_error=\$6,updated_at=NOW\(\) WHERE user_id=\$1 AND marketplace=\$2 AND encrypted_credentials=\$3 AND nonce=\$4 AND auth_tag=\$5/);
+});
