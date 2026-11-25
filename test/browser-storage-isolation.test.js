@@ -19,5 +19,9 @@ test("account switching restores only that profile's local data", () => {
   assert.match(html, /loadMarketplaceConnections/);
   assert.match(html, /marketplaceLoadGeneration/);
   assert.match(html, /generation!==marketplaceLoadGeneration/);
+  const scopeSwitch = html.slice(html.indexOf("function setStorageScope"), html.indexOf("const parseWBNumber"));
+  assert.ok(scopeSwitch.indexOf("marketplaceLoadGeneration++") < scopeSwitch.indexOf("storageScope=next"));
+  assert.match(scopeSwitch, /marketplaceState\.wildberries=null;marketplaceState\.ozon=null;ozonDemoActive=false/);
+  assert.match(scopeSwitch, /renderMarketplaceState\(\)/);
   assert.match(html, /recordsPanel\.style\.display='';renderRecords\(\)/);
 });
