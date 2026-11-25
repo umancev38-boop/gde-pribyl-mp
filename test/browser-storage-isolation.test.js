@@ -43,3 +43,10 @@ test("backup restore rolls back both local datasets if either storage write fail
   assert.match(restore, /previousProducts===null\?localStorage\.removeItem\(PRODUCT_KEY\):localStorage\.setItem\(PRODUCT_KEY,previousProducts\)/);
   assert.match(restore, /previousHistory===null\?localStorage\.removeItem\(HISTORY_KEY\):localStorage\.setItem\(HISTORY_KEY,previousHistory\)/);
 });
+
+
+test("cloud sync deduplicates records regardless of JSON object key order", () => {
+  const sync = html.slice(html.indexOf("function stableSerialize"), html.indexOf("async function syncAccount"));
+  assert.match(sync, /Object\.keys\(value\)\.sort\(\)/);
+  assert.match(sync, /map\.set\(stableSerialize\(item\),item\)/);
+});

@@ -604,9 +604,14 @@ el('logoutAccount').addEventListener('click',async()=>{
  catch(error){setAccountStatus(error.message,true)}
  finally{el('logoutAccount').disabled=false}
 });
+function stableSerialize(value){
+ if(Array.isArray(value))return '['+value.map(stableSerialize).join(',')+']';
+ if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+stableSerialize(value[key])).join(',')+'}';
+ return JSON.stringify(value);
+}
 function mergeUnique(localRows,cloudRows){
  const map=new Map();
- [...cloudRows,...localRows].forEach(item=>map.set(JSON.stringify(item),item));
+ [...cloudRows,...localRows].forEach(item=>map.set(stableSerialize(item),item));
  return [...map.values()];
 }
 async function syncAccount(){
