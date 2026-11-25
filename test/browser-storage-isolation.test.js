@@ -102,11 +102,14 @@ test("marketplace connect, refresh and disconnect ignore responses from a previo
 });
 
 
-test("reset example button restores every calculator field and recalculates results", () => {
+test("reset example button clears every numeric calculator field and recalculates results", () => {
   assert.match(html, /<button id="reset"[^>]*type="button">Сбросить пример<\/button>/);
-  assert.match(html, /const EXAMPLE_DEFAULTS=\{market:'Wildberries',price:'2490',cost:'800',commission:'15',logistics:'250',ads:'200',other:'140',storage:'0',packaging:'0',returns:'0',tax:'6',quantity:'1'\}/);
   const reset = html.slice(html.indexOf("function resetExample"), html.indexOf("function snapshot"));
-  assert.match(reset, /field\.value=EXAMPLE_DEFAULTS\[id\]/);
+  assert.match(reset, /if\(id==='market'\)continue/);
+  assert.match(reset, /field\.value=''/);
   assert.match(reset, /calc\(\)/);
   assert.match(reset, /addEventListener\('click',resetExample\)/);
+  for (const id of ["price","cost","commission","logistics","ads","other","storage","packaging","returns","tax","quantity"]) {
+    assert.match(html, new RegExp('id="'+id+'" type="number"'));
+  }
 });
