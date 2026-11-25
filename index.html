@@ -344,6 +344,7 @@ function setStorageScope(userId){
  // Invalidate pending requests and clear the previous account's marketplace UI
  // before loading the next profile, so stale snapshots are never shown in between.
  marketplaceLoadGeneration++;
+ for(const [id,label] of [['connectWb','Подключить WB'],['connectOzon','Подключить Ozon'],['refreshWb','Обновить тарифы'],['refreshOzon','Обновить данные'],['disconnectWb','Отключить'],['disconnectOzon','Отключить']]){const button=el(id);if(button){button.disabled=false;button.textContent=label}}
  marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;
  renderMarketplaceState();
  storageScope=next;
@@ -682,6 +683,8 @@ el('syncAccount').addEventListener('click',syncAccount);
 
 const marketplaceState={wildberries:null,ozon:null};
 let marketplaceLoadGeneration=0;
+function captureMarketplaceContext(){return {generation:marketplaceLoadGeneration,userId:accountUser?.id??null,scope:storageScope}}
+function isMarketplaceContextCurrent(context){return context.generation===marketplaceLoadGeneration&&String(accountUser?.id??'')===String(context.userId??'')&&storageScope===context.scope}
 let ozonDemoActive=false;
 const ozonDemoSnapshot={
  fetchedAt:'DEMO',
@@ -786,6 +789,7 @@ async function loadMarketplaceConnections(){
  }
 }
 async function connectMarketplace(provider){
+ const context=captureMarketplaceContext();
  const isWb=provider==='wildberries';
  const button=el(isWb?'connectWb':'connectOzon');
  const body=isWb?{token:el('wbApiToken').value.trim()}:{clientId:el('ozonClientId').value.trim(),apiKey:el('ozonApiKey').value.trim()};
@@ -793,30 +797,35 @@ async function connectMarketplace(provider){
  button.disabled=true;button.textContent='Проверяем ключ…';
  try{
   const data=await apiRequest('/api/marketplaces/'+provider+'/credentials',{method:'PUT',body:JSON.stringify(body)});
+  if(!isMarketplaceContextCurrent(context))return;
   marketplaceState[provider]={connected:true,snapshot:data.snapshot};
   if(isWb){el('wbApiToken').value='';hydrateWbApiSnapshot(data.snapshot)}else{ozonDemoActive=false;el('ozonClientId').value='';el('ozonApiKey').value=''}
   renderMarketplaceState();
- }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
- finally{button.disabled=false;button.textContent=isWb?'Подключить WB':'Подключить Ozon'}
+ }catch(error){if(isMarketplaceContextCurrent(context))el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
+ finally{if(isMarketplaceContextCurrent(context)){button.disabled=false;button.textContent=isWb?'Подключить WB':'Подключить Ozon'}}
 }
 async function refreshMarketplace(provider){
+ const context=captureMarketplaceContext();
  const isWb=provider==='wildberries',button=el(isWb?'refreshWb':'refreshOzon');
  button.disabled=true;button.textContent='Обновляем…';
  try{
   const data=await apiRequest('/api/marketplaces/'+provider+'/refresh',{method:'POST',body:'{}'});
+  if(!isMarketplaceContextCurrent(context))return;
   marketplaceState[provider]={connected:true,snapshot:data.snapshot};if(isWb)hydrateWbApiSnapshot(data.snapshot);else ozonDemoActive=false;renderMarketplaceState();
- }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
- finally{button.disabled=false;button.textContent=isWb?'Обновить тарифы':'Обновить данные'}
+ }catch(error){if(isMarketplaceContextCurrent(context))el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
+ finally{if(isMarketplaceContextCurrent(context)){button.disabled=false;button.textContent=isWb?'Обновить тарифы':'Обновить данные'}}
 }
 async function disconnectMarketplace(provider){
+ const context=captureMarketplaceContext();
  const isWb=provider==='wildberries',button=el(isWb?'disconnectWb':'disconnectOzon');
  button.disabled=true;
  try{
   await apiRequest('/api/marketplaces/'+provider,{method:'DELETE',body:'{}'});
+  if(!isMarketplaceContextCurrent(context))return;
   marketplaceState[provider]=null;if(!isWb)ozonDemoActive=false;renderMarketplaceState();
   el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent='Подключение отключено. Ключ удалён с сервера.';
- }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
- finally{button.disabled=false}
+ }catch(error){if(isMarketplaceContextCurrent(context))el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
+ finally{if(isMarketplaceContextCurrent(context))button.disabled=false}
 }
 el('connectWb').addEventListener('click',()=>connectMarketplace('wildberries'));
 el('connectOzon').addEventListener('click',()=>connectMarketplace('ozon'));
