@@ -280,11 +280,35 @@ el('exportData').addEventListener('click',()=>{
  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='gde-pribyl-mp-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);el('backupStatus').textContent='Резервная копия подготовлена. Проверь папку «Файлы» на iPhone.';
 });
 el('importData').addEventListener('change',async event=>{
- const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.app!=='Где прибыль МП'||data.backupVersion!==BACKUP_VERSION||!Array.isArray(data.products)||!Array.isArray(data.history))throw new Error('Неверный формат резервной копии');
- if(!confirm('Восстановить резервную копию? Текущие товары и история будут заменены данными из файла.'))return;
- const validRows=arr=>arr.every(x=>x&&typeof x==='object'&&x.values&&typeof x.values==='object'&&typeof x.market==='string');if(!validRows(data.products)||!validRows(data.history))throw new Error('Файл повреждён или имеет неподдерживаемую структуру');if(data.products.length>(accountLimits?.products??PLAN_LIMITS[currentPlan].products)||data.history.length>(accountLimits?.history??PLAN_LIMITS[currentPlan].history))throw new Error('Резервная копия превышает лимиты текущего тарифа. Данные не изменены.');
- if(!writeStore(PRODUCT_KEY,data.products)||!writeStore(HISTORY_KEY,data.history))throw new Error('Не удалось записать данные в память браузера');renderRecords();renderBusinessDashboard();el('backupStatus').textContent='Данные успешно восстановлены.';
- }catch(err){el('backupStatus').textContent='Ошибка: '+err.message;}finally{event.target.value='';}
+ const file=event.target.files?.[0];if(!file)return;
+ try{
+  if(file.size>1800000)throw new Error('Файл резервной копии больше 1,8 МБ.');
+  const raw=await file.text();
+  if(new TextEncoder().encode(raw).length>1800000)throw new Error('Размер резервной копии превышает 1,8 МБ.');
+  const data=JSON.parse(raw);
+  if(data.app!=='Где прибыль МП'||data.backupVersion!==BACKUP_VERSION||!Array.isArray(data.products)||!Array.isArray(data.history))throw new Error('Неверный формат резервной копии.');
+  const limits=accountLimits||PLAN_LIMITS[currentPlan];
+  if(data.products.length>limits.products||data.history.length>limits.history)throw new Error('Резервная копия превышает лимиты текущего тарифа. Данные не изменены.');
+  const validRows=(arr,isProduct)=>arr.every(item=>{
+   if(!item||typeof item!=='object'||Array.isArray(item)||!item.values||typeof item.values!=='object'||Array.isArray(item.values)||typeof item.market!=='string')return false;
+   if(isProduct&&(typeof item.name!=='string'||!item.name.trim()))return false;
+   return ids.every(id=>Object.hasOwn(item.values,id)&&typeof item.values[id]==='string'&&item.values[id].length<=100);
+  });
+  if(!validRows(data.products,true)||!validRows(data.history,false))throw new Error('Файл повреждён или имеет неподдерживаемую структуру.');
+  if(!confirm('Восстановить резервную копию? Текущие товары и история будут заменены данными из файла.'))return;
+  const previousProducts=localStorage.getItem(PRODUCT_KEY),previousHistory=localStorage.getItem(HISTORY_KEY);
+  try{
+   localStorage.setItem(PRODUCT_KEY,JSON.stringify(data.products));
+   localStorage.setItem(HISTORY_KEY,JSON.stringify(data.history));
+  }catch(storageError){
+   try{previousProducts===null?localStorage.removeItem(PRODUCT_KEY):localStorage.setItem(PRODUCT_KEY,previousProducts)}catch{}
+   try{previousHistory===null?localStorage.removeItem(HISTORY_KEY):localStorage.setItem(HISTORY_KEY,previousHistory)}catch{}
+   throw new Error('Не удалось полностью восстановить данные. Предыдущие записи сохранены, если браузер разрешил откат.');
+  }
+  renderRecords();renderBusinessDashboard();
+  el('backupStatus').textContent='Данные успешно восстановлены. Для аккаунта нажми «Синхронизировать данные», чтобы отправить копию в облако.';
+ }catch(err){el('backupStatus').textContent='Ошибка: '+err.message;}
+ finally{event.target.value='';}
 });
 el('copy').addEventListener('click',async()=>{const x=calc();if(!x.valid){el('copy').textContent='Проверь данные';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600);return}const s=`Где прибыль МП — расчёт\nПлощадка: ${x.market}\nЦена: ${money(x.price)}\nЗакупка: ${money(x.cost)}\nКомиссия: ${x.commission}%\nЛогистика: ${money(x.logistics)}\nРеклама: ${money(x.ads)}\nПрочие расходы: ${money(x.other)}\nХранение: ${money(x.storage)}\nУпаковка и маркировка: ${money(x.packaging)}\nРезерв на возвраты и брак: ${money(x.returns)}\nНалог: ${x.tax}%\nПрибыль с единицы: ${money(x.profit)}\nМаржинальность: ${x.margin.toFixed(1)}%\nПродаж: ${x.quantity}\nПрибыль на объём: ${money(x.total)}`;try{await navigator.clipboard.writeText(s);el('copy').textContent='Скопировано!';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600)}catch(e){el('copy').textContent='Не удалось скопировать'}});
 
