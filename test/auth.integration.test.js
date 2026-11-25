@@ -203,6 +203,23 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     const otherRegistrationData = await otherRegistration.json();
     const otherCookie = otherRegistration.headers.get("set-cookie")?.match(/gpm_session=([^;]+)/)?.[1];
     assert.ok(otherCookie);
+
+    const otherAccountData = await request("/api/account/data", {
+      headers: { Cookie: "gpm_session=" + otherCookie }
+    });
+    assert.equal(otherAccountData.status, 200);
+    const otherData = await otherAccountData.json();
+    assert.deepEqual(otherData.products, [], "a new account must not read another user's products");
+    assert.deepEqual(otherData.history, [], "a new account must not read another user's history");
+
+    const ownerDataAfterOtherRead = await request("/api/account/data", {
+      headers: { Cookie: "gpm_session=" + secondCookie }
+    });
+    assert.equal(ownerDataAfterOtherRead.status, 200);
+    const ownerData = await ownerDataAfterOtherRead.json();
+    assert.deepEqual(ownerData.products, products);
+    assert.deepEqual(ownerData.history, history);
+
     await activatePro(otherRegistrationData.user.id);
 
     const privateSnapshot = { fetchedAt: "synthetic-test", products: 1, items: [{ productId: "700001", offerId: "PRIVATE-DEMO" }] };
