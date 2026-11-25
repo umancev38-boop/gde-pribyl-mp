@@ -207,7 +207,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 </section>
 <section class="panel records" aria-labelledby="recordsTitle">
 <h2 id="recordsTitle">Мои товары и история расчётов</h2>
-<p class="recordsIntro">Без входа данные хранятся в этом браузере. После входа их можно синхронизировать с облаком; резервная копия остаётся доступна в любой момент.</p>
+<p class="recordsIntro">Гостевые данные и данные разных аккаунтов хранятся отдельно. После входа синхронизируется только профиль текущего аккаунта. Чтобы перенести гостевые записи в аккаунт, экспортируй резервную копию без входа, затем войди и импортируй файл. Резервная копия остаётся доступна в любой момент.</p>
 <div class="recordsGrid">
 <div><h3>Сохранённые товары</h3><div id="productsList" class="recordList"><p class="empty">Пока нет сохранённых товаров.</p></div></div>
 <div><h3>История расчётов</h3><div id="historyList" class="recordList"><p class="empty">Расчёты пока не сохранены.</p></div></div>
@@ -232,7 +232,10 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <p><a href="/legal.html#offer">Публичная оферта</a> · <a href="/legal.html#service">Условия услуги</a> · <a href="/legal.html#refund">Возврат и отказ</a> · <a href="/legal.html#privacy">Политика персональных данных</a> · <a href="/legal.html#contacts">Реквизиты</a>.</p></footer>
 <script>
 const ids=['market','price','cost','commission','logistics','ads','other','storage','packaging','returns','tax','quantity'];
-const PRODUCT_KEY='gde_pribyl_mp_products_v04', HISTORY_KEY='gde_pribyl_mp_history_v04';
+const PRODUCT_KEY_BASE='gde_pribyl_mp_products_v04', HISTORY_KEY_BASE='gde_pribyl_mp_history_v04';
+let storageScope='guest';
+let PRODUCT_KEY=PRODUCT_KEY_BASE, HISTORY_KEY=HISTORY_KEY_BASE;
+const recordsPanel=document.querySelector('.records');recordsPanel.style.display='none';
 const BACKUP_VERSION=1;
 let currentPlan='free';
 const PLAN_LIMITS={free:{products:5,history:20},pro:{products:200,history:1000},business:{products:5000,history:10000}};
@@ -286,9 +289,28 @@ el('importData').addEventListener('change',async event=>{
 el('copy').addEventListener('click',async()=>{const x=calc();if(!x.valid){el('copy').textContent='Проверь данные';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600);return}const s=`Где прибыль МП — расчёт\nПлощадка: ${x.market}\nЦена: ${money(x.price)}\nЗакупка: ${money(x.cost)}\nКомиссия: ${x.commission}%\nЛогистика: ${money(x.logistics)}\nРеклама: ${money(x.ads)}\nПрочие расходы: ${money(x.other)}\nХранение: ${money(x.storage)}\nУпаковка и маркировка: ${money(x.packaging)}\nРезерв на возвраты и брак: ${money(x.returns)}\nНалог: ${x.tax}%\nПрибыль с единицы: ${money(x.profit)}\nМаржинальность: ${x.margin.toFixed(1)}%\nПродаж: ${x.quantity}\nПрибыль на объём: ${money(x.total)}`;try{await navigator.clipboard.writeText(s);el('copy').textContent='Скопировано!';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600)}catch(e){el('copy').textContent='Не удалось скопировать'}});
 
 // Импорт тарифов Wildberries из официальных JSON-ответов. Секретный API-ключ здесь не используется.
-const WB_COMMISSION_KEY='gde_pribyl_mp_wb_commissions_v1';
-const WB_BOX_KEY='gde_pribyl_mp_wb_box_rates_v1';
+const WB_COMMISSION_KEY_BASE='gde_pribyl_mp_wb_commissions_v1';
+const WB_BOX_KEY_BASE='gde_pribyl_mp_wb_box_rates_v1';
+let WB_COMMISSION_KEY=WB_COMMISSION_KEY_BASE, WB_BOX_KEY=WB_BOX_KEY_BASE;
 let wbCommissions=null, wbBoxRates=null;
+function setStorageScope(userId){
+ const next=userId===null||userId===undefined?'guest':'user_'+String(userId);
+ if(next===storageScope)return;
+ storageScope=next;
+ const suffix=storageScope==='guest'?'':'_'+storageScope;
+ PRODUCT_KEY=PRODUCT_KEY_BASE+suffix;HISTORY_KEY=HISTORY_KEY_BASE+suffix;
+ WB_COMMISSION_KEY=WB_COMMISSION_KEY_BASE+suffix;WB_BOX_KEY=WB_BOX_KEY_BASE+suffix;
+ wbCommissions=null;wbBoxRates=null;
+ try{
+  wbCommissions=JSON.parse(localStorage.getItem(WB_COMMISSION_KEY)||'null');
+  wbBoxRates=JSON.parse(localStorage.getItem(WB_BOX_KEY)||'null');
+  if(wbCommissions)refreshWBCategories();else{el('wbCategory').replaceChildren(new Option('Сначала загрузи комиссии',''));el('wbCategory').disabled=true}
+  if(wbBoxRates)refreshWBWarehouses();else{el('wbWarehouse').replaceChildren(new Option('Сначала загрузи тарифы',''));el('wbWarehouse').disabled=true}
+  updateWBApplyState();
+  setWBStatus(wbCommissions||wbBoxRates?'Загруженные тарифы WB относятся к этому профилю браузера. Проверь их актуальность перед применением.':'Для этого профиля ещё не загружены JSON-тарифы WB.',!wbCommissions&&!wbBoxRates);
+ }catch(error){setWBStatus('Сохранённые тарифы WB повреждены. Загрузи JSON-файлы заново.',true)}
+ renderRecords();renderBusinessDashboard();
+}
 const parseWBNumber=value=>{
  if(value===null||value===undefined||value==='')return 0;
  const n=Number(String(value).replace(/\s/g,'').replace(',','.').replace('%',''));
@@ -527,6 +549,8 @@ async function refreshSubscription(){
   else setAccountStatus('Сервер аккаунтов временно недоступен: '+error.message,true);
   subscriptionMessage='Для оформления подписки войди в аккаунт.';
  }
+ setStorageScope(accountUser?.id??null);
+ recordsPanel.style.display='';renderRecords();
  updateAuthUI();updatePlanUI();loadMarketplaceConnections();
 }
 async function authenticate(mode){
@@ -547,7 +571,7 @@ el('registerAccount').addEventListener('click',()=>authenticate('register'));
 el('loginAccount').addEventListener('click',()=>authenticate('login'));
 el('logoutAccount').addEventListener('click',async()=>{
  el('logoutAccount').disabled=true;
- try{await apiRequest('/api/auth/logout',{method:'POST',body:'{}'});accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;updateAuthUI();updatePlanUI();setAccountStatus('Вы вышли из аккаунта. Локальные данные сохранены.');paymentStatus.textContent='Для оформления подписки войди в аккаунт.'}
+ try{await apiRequest('/api/auth/logout',{method:'POST',body:'{}'});accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;setStorageScope(null);renderRecords();loadMarketplaceConnections();updateAuthUI();updatePlanUI();setAccountStatus('Вы вышли из аккаунта. Локальные данные этого профиля сохранены отдельно.');paymentStatus.textContent='Для оформления подписки войди в аккаунт.'}
  catch(error){setAccountStatus(error.message,true)}
  finally{el('logoutAccount').disabled=false}
 });
@@ -576,6 +600,7 @@ async function syncAccount(){
 el('syncAccount').addEventListener('click',syncAccount);
 
 const marketplaceState={wildberries:null,ozon:null};
+let marketplaceLoadGeneration=0;
 let ozonDemoActive=false;
 const ozonDemoSnapshot={
  fetchedAt:'DEMO',
@@ -662,14 +687,19 @@ function renderMarketplaceState(){
   :'Подключение доступно после входа на тарифе PRO или BUSINESS.';
 }
 async function loadMarketplaceConnections(){
+ const generation=++marketplaceLoadGeneration;
+ const requestedUserId=accountUser?.id??null;
  if(!accountUser||!hasPlan('pro')){marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;renderMarketplaceState();return}
  try{
   const data=await apiRequest('/api/marketplaces');
+  if(generation!==marketplaceLoadGeneration||accountUser?.id!==requestedUserId)return;
   marketplaceState.wildberries=data.connections?.wildberries||null;
   marketplaceState.ozon=data.connections?.ozon||null;
   if(marketplaceState.wildberries?.snapshot)hydrateWbApiSnapshot(marketplaceState.wildberries.snapshot);
   renderMarketplaceState();
  }catch(error){
+  if(generation!==marketplaceLoadGeneration||accountUser?.id!==requestedUserId)return;
+  marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;
   el('marketplaceSummary').textContent=error.message;
   renderMarketplaceState();
  }
