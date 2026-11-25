@@ -530,7 +530,7 @@ async function apiRequest(path,options={}){
  const headers={...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})};
  const response=await fetch(API_URL+path,{...options,headers,credentials:'include',cache:'no-store'});
  let data={};try{data=await response.json()}catch{}
- if(!response.ok)throw new Error(data.error||'Ошибка запроса ('+response.status+').');
+ if(!response.ok){const error=new Error(data.error||'Ошибка запроса ('+response.status+').');error.status=response.status;error.code=data.code;throw error;}
  return data;
 }
 function setAccountStatus(message,warn=false){
