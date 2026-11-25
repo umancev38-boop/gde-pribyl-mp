@@ -508,8 +508,8 @@ app.post("/api/marketplaces/:marketplace/refresh", rateLimit({ max: 5 }), requir
   } catch (error) {
     if (error instanceof MarketplaceApiError && credentialRecord) {
       await pool.query(
-        "UPDATE marketplace_integrations SET last_error=$7,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2 AND encrypted_credentials=$3 AND nonce=$4 AND auth_tag=$5",
-        [req.user.id, marketplace, credentialRecord.encryptedCredentials, credentialRecord.nonce, credentialRecord.authTag, error.message, error.message]
+        "UPDATE marketplace_integrations SET last_error=$6,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2 AND encrypted_credentials=$3 AND nonce=$4 AND auth_tag=$5",
+        [req.user.id, marketplace, credentialRecord.encryptedCredentials, credentialRecord.nonce, credentialRecord.authTag, error.message]
       ).catch(() => {});
     }
     return marketplaceError(res, error);
