@@ -55,6 +55,22 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     }
     assert.equal(ready, true, "API did not become healthy: " + logs);
 
+    const preflight = await request("/api/marketplaces/ozon", {
+      method: "OPTIONS",
+      headers: {
+        Origin: origin,
+        "Access-Control-Request-Method": "DELETE",
+        "Access-Control-Request-Headers": "content-type"
+      }
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), origin);
+    assert.equal(preflight.headers.get("access-control-allow-credentials"), "true");
+    assert.ok(
+      preflight.headers.get("access-control-allow-methods")?.split(",").map(value => value.trim()).includes("DELETE"),
+      "CORS preflight must explicitly allow DELETE for marketplace disconnect"
+    );
+
     const email = "integration-" + randomUUID() + "@example.test";
     const password = "ValidPass123!";
     const originHeader = { Origin: origin };
