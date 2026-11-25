@@ -630,10 +630,9 @@ function stableSerialize(value){
  if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+stableSerialize(value[key])).join(',')+'}';
  return JSON.stringify(value);
 }
-function recordContentKey(item){const copy={...item};delete copy.id;return stableSerialize(copy)}
 function mergeUnique(localRows,cloudRows){
  const map=new Map();
- [...cloudRows,...localRows].forEach(item=>{const key=recordContentKey(item);if(!map.has(key))map.set(key,item)});
+ [...cloudRows,...localRows].forEach(item=>map.set(stableSerialize(item),item));
  return [...map.values()];
 }
 async function syncAccount(){
