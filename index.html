@@ -36,6 +36,45 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 @media(max-width:760px){.priceGrid{grid-template-columns:1fr}}
 .portfolioTable{width:100%;border-collapse:collapse;font-size:13px}.portfolioTable th,.portfolioTable td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.portfolioTable th{color:var(--muted);font-weight:700}.portfolioTableWrap{overflow-x:auto}.insightItem{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:8px 0;font-size:13px}.insightItem strong{display:block;margin-bottom:3px}.insightItem.warn{background:#fff8e8;border-color:#f2e3bd}.insightItem.good{background:#f2f7f4;border-color:#dcebe1}
 .accountPanel{margin:20px 0}.accountGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.accountActions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.accountMeta{font-size:13px;color:var(--muted);margin:8px 0}.accountStatus{font-size:13px;min-height:20px;margin-top:10px;color:var(--green)}.accountStatus.warn{color:#8a5b0b}@media(max-width:600px){.accountGrid{grid-template-columns:1fr}}
+
+/* Android and narrow-screen hardening */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{min-width:320px;overflow-x:hidden}
+main,footer{width:100%}
+.layout>*,.panel,.field{min-width:0}
+input,select,textarea{font-size:16px;min-height:44px;touch-action:manipulation}
+button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.line b,.metric strong,.record strong,.record small{overflow-wrap:anywhere;word-break:normal}
+@media(max-width:760px){
+ header{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+ main{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+ .layout{grid-template-columns:minmax(0,1fr)}
+ .layout>*{width:100%;min-width:0}
+ .panel{padding:16px}
+ .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .actions{gap:8px}
+ .actions button,.actions .fileButton{max-width:100%;min-width:0}
+ .record{align-items:flex-start;flex-wrap:wrap}
+ .recordActions{margin-left:auto}
+ .portfolioTableWrap{max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+}
+@media(max-width:480px){
+ .fields{grid-template-columns:minmax(0,1fr)}
+ .field.full{grid-column:1}
+ .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .actions button,.actions .fileButton{width:100%;justify-content:center;text-align:center;padding-left:8px;padding-right:8px}
+ .profit{font-size:clamp(28px,9vw,36px)}
+ .metric{min-width:0;padding:11px}
+ .metric strong{font-size:clamp(14px,4vw,18px)}
+ .line{align-items:flex-start}
+ .line span{min-width:0;flex:1}
+ .line b{max-width:55%;text-align:right}
+}
+@media(hover:none) and (pointer:coarse){
+ button,.fileButton{cursor:pointer}
+ input,select{scroll-margin-block:100px}
+}
+
 </style>
 </head>
 <body>
