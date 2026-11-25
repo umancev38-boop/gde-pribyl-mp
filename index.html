@@ -571,7 +571,7 @@ el('registerAccount').addEventListener('click',()=>authenticate('register'));
 el('loginAccount').addEventListener('click',()=>authenticate('login'));
 el('logoutAccount').addEventListener('click',async()=>{
  el('logoutAccount').disabled=true;
- try{await apiRequest('/api/auth/logout',{method:'POST',body:'{}'});accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;setStorageScope(null);renderRecords();updateAuthUI();updatePlanUI();setAccountStatus('Вы вышли из аккаунта. Локальные данные этого профиля сохранены отдельно.');paymentStatus.textContent='Для оформления подписки войди в аккаунт.'}
+ try{await apiRequest('/api/auth/logout',{method:'POST',body:'{}'});accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;setStorageScope(null);renderRecords();loadMarketplaceConnections();updateAuthUI();updatePlanUI();setAccountStatus('Вы вышли из аккаунта. Локальные данные этого профиля сохранены отдельно.');paymentStatus.textContent='Для оформления подписки войди в аккаунт.'}
  catch(error){setAccountStatus(error.message,true)}
  finally{el('logoutAccount').disabled=false}
 });
@@ -600,6 +600,7 @@ async function syncAccount(){
 el('syncAccount').addEventListener('click',syncAccount);
 
 const marketplaceState={wildberries:null,ozon:null};
+let marketplaceLoadGeneration=0;
 let ozonDemoActive=false;
 const ozonDemoSnapshot={
  fetchedAt:'DEMO',
@@ -686,14 +687,19 @@ function renderMarketplaceState(){
   :'Подключение доступно после входа на тарифе PRO или BUSINESS.';
 }
 async function loadMarketplaceConnections(){
+ const generation=++marketplaceLoadGeneration;
+ const requestedUserId=accountUser?.id??null;
  if(!accountUser||!hasPlan('pro')){marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;renderMarketplaceState();return}
  try{
   const data=await apiRequest('/api/marketplaces');
+  if(generation!==marketplaceLoadGeneration||accountUser?.id!==requestedUserId)return;
   marketplaceState.wildberries=data.connections?.wildberries||null;
   marketplaceState.ozon=data.connections?.ozon||null;
   if(marketplaceState.wildberries?.snapshot)hydrateWbApiSnapshot(marketplaceState.wildberries.snapshot);
   renderMarketplaceState();
  }catch(error){
+  if(generation!==marketplaceLoadGeneration||accountUser?.id!==requestedUserId)return;
+  marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;
   el('marketplaceSummary').textContent=error.message;
   renderMarketplaceState();
  }
