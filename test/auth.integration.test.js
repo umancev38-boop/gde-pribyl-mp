@@ -69,6 +69,11 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     assert.ok(firstCookie, "registration must issue a session cookie");
 
     const me = await request("/api/auth/me", { headers: { Cookie: "gpm_session=" + firstCookie } });
+    const marketplaceAccess = await request("/api/marketplaces", {
+      headers: { Cookie: "gpm_session=" + firstCookie }
+    });
+    assert.equal(marketplaceAccess.status, 403, "FREE plan must not access marketplace integrations");
+
     assert.equal(me.status, 200);
     assert.equal((await me.json()).user.email, email);
 
