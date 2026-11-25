@@ -47,3 +47,51 @@ test("Ozon empty catalogue does not issue price requests", async () => {
   assert.deepEqual(result.items, []);
   assert.equal(priceCalls, 0);
 });
+
+test("Ozon rejects a multi-page price cursor cycle", async () => {
+  let priceCalls = 0;
+  await assert.rejects(
+    fetchMarketplaceSnapshot("ozon", credentials, async (url, options) => {
+      if (url.endsWith("/v3/product/list")) {
+        return ok({ result: { items: [{ product_id: 12345 }], last_id: "" } });
+      }
+      const cursor = JSON.parse(options.body).cursor;
+      priceCalls += 1;
+      const next = cursor === "" ? "cursor-a" : cursor === "cursor-a" ? "cursor-b" : "cursor-a";
+      return ok({ result: { items: [], cursor: next } });
+    }),
+    /повторяющийся курсор цен/
+  );
+  assert.equal(priceCalls, 3);
+});
+
+test("Ozon rejects a multi-page product cursor cycle", async () => {
+  let productCalls = 0;
+  await assert.rejects(
+    fetchMarketplaceSnapshot("ozon", credentials, async (url, options) => {
+      if (url.endsWith("/v3/product/list")) {
+        const lastId = JSON.parse(options.body).last_id;
+        productCalls += 1;
+        const next = lastId === "" ? "cursor-a" : lastId === "cursor-a" ? "cursor-b" : "cursor-a";
+        return ok({ result: { items: [{ product_id: productCalls }], last_id: next } });
+      }
+      return ok({ result: { items: [], cursor: "" } });
+    }),
+    /повторяющийся курсор каталога/
+  );
+  assert.equal(productCalls, 3);
+});
+
+test("Ozon removes duplicate product IDs before requesting prices", async () => {
+  let priceProductIds = [];
+  const result = await fetchMarketplaceSnapshot("ozon", credentials, async (url, options) => {
+    const body = JSON.parse(options.body);
+    if (url.endsWith("/v3/product/list")) {
+      return ok({ result: { items: [{ product_id: 7 }, { product_id: 7 }, { product_id: 8 }], last_id: "" } });
+    }
+    priceProductIds = body.filter.product_id;
+    return ok({ result: { items: [], cursor: "" } });
+  });
+  assert.deepEqual(priceProductIds, ["7", "8"]);
+  assert.equal(result.products, 2);
+});
