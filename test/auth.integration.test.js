@@ -101,6 +101,13 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
       assert.equal(disconnect.status, 403, "FREE plan must not call " + provider + " integration routes");
     }
 
+    const paymentAttempt = await request("/api/payments/create", {
+      method: "POST",
+      headers: { Cookie: "gpm_session=" + firstCookie },
+      body: JSON.stringify({ plan: "pro" })
+    });
+    assert.equal(paymentAttempt.status, 503, "Payments must remain disabled without Robokassa credentials");
+
     assert.equal(me.status, 200);
     assert.equal((await me.json()).user.email, email);
 
