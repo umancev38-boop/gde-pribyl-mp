@@ -296,6 +296,11 @@ let wbCommissions=null, wbBoxRates=null;
 function setStorageScope(userId){
  const next=userId===null||userId===undefined?'guest':'user_'+String(userId);
  if(next===storageScope)return;
+ // Invalidate pending requests and clear the previous account's marketplace UI
+ // before loading the next profile, so stale snapshots are never shown in between.
+ marketplaceLoadGeneration++;
+ marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;
+ renderMarketplaceState();
  storageScope=next;
  const suffix=storageScope==='guest'?'':'_'+storageScope;
  PRODUCT_KEY=PRODUCT_KEY_BASE+suffix;HISTORY_KEY=HISTORY_KEY_BASE+suffix;
