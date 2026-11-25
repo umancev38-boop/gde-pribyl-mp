@@ -321,37 +321,38 @@ app.post("/api/auth/logout",sameOrigin,async(req,res)=>{
   clearSession(res);res.json({ok:true});
 });
 app.get("/api/account/data",requireUser,async(req,res)=>{
+  let client;
   try {
-    const [products,history,plan]=await Promise.all([
-      pool.query("SELECT data,ctid::text AS row_id FROM user_products WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
-      pool.query("SELECT data,ctid::text AS row_id FROM user_history WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
-      accountPlan(req.user.id)
-    ]);
-    const migrateLegacyRows=async(table,rows)=>{
-      const result=[];
-      for(const row of rows){
-        let data=row.data;
-        if(!data.id){data={...data,id:legacyRecordId(data,table==="user_products"?"products":"history")};await pool.query("UPDATE "+table+" SET data=$1::jsonb WHERE user_id=$2 AND ctid=$3::tid",[JSON.stringify(data),req.user.id,row.row_id]);}
-        result.push(data);
-      }
-      return result;
-    };
-    const [productRows,historyRows]=await Promise.all([
-      migrateLegacyRows("user_products",products.rows),
-      migrateLegacyRows("user_history",history.rows)
-    ]);
     await pool.query("INSERT INTO user_data_versions(user_id,version) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING",[req.user.id]);
-    const [version,tombstones]=await Promise.all([
-      pool.query("SELECT version FROM user_data_versions WHERE user_id=$1",[req.user.id]),
-      pool.query("SELECT record_id FROM user_data_tombstones WHERE user_id=$1",[req.user.id])
+    client=await pool.connect();
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    const [products,history,subscription,version,tombstones]=await Promise.all([
+      client.query("SELECT data FROM user_products WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
+      client.query("SELECT data FROM user_history WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
+      client.query("SELECT plan_code,expires_at FROM subscriptions WHERE user_id=$1 AND expires_at>NOW() ORDER BY expires_at DESC LIMIT 1",[req.user.id]),
+      client.query("SELECT version FROM user_data_versions WHERE user_id=$1",[req.user.id]),
+      client.query("SELECT record_id FROM user_data_tombstones WHERE user_id=$1",[req.user.id])
     ]);
+    const migrateLegacyRows=(rows,namespace)=>rows.map(row=>{
+      const data=row.data;
+      if(!data||typeof data!=="object"||Array.isArray(data)) throw new Error("Invalid stored account record");
+      return data.id?data:{...data,id:legacyRecordId(data,namespace)};
+    });
+    const productRows=migrateLegacyRows(products.rows,"products");
+    const historyRows=migrateLegacyRows(history.rows,"history");
     const deletedIds=tombstones.rows.map(row=>row.record_id);
     const deletedSet=new Set(deletedIds);
+    const planCode=normalizePlanCode(subscription.rows[0]?.plan_code);
+    const plan={plan:planCode,expiresAt:subscription.rows[0]?.expires_at||null,limits:PLAN_ENTITLEMENTS[planCode]};
+    await client.query("COMMIT");
     res.setHeader("Cache-Control","no-store, private");
     res.json({products:productRows.filter(row=>!deletedSet.has(row.id)),history:historyRows.filter(row=>!deletedSet.has(row.id)),deletedIds,version:Number(version.rows[0].version),...plan});
   } catch(error) {
+    if(client) await client.query("ROLLBACK").catch(()=>{});
     console.error("Account data read failed:",error.message);
     res.status(500).json({error:"Не удалось загрузить данные аккаунта."});
+  } finally {
+    client?.release();
   }
 });
 app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
