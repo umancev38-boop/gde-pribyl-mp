@@ -12,8 +12,17 @@
           "sales_percent_fbo": 15.5,
           "sales_percent_fbs": 17.5,
           "fbo_deliv_to_customer_amount": 82.5,
-          "fbo_fulfillment_amount": 43.2
-        }
+          "fbo_direct_flow_trans_min_amount": 31,
+          "fbo_direct_flow_trans_max_amount": 46.5,
+          "fbo_return_flow_amount": 50,
+          "fbs_first_mile_min_amount": 10,
+          "fbs_first_mile_max_amount": 25,
+          "fbs_direct_flow_trans_min_amount": 41,
+          "fbs_direct_flow_trans_max_amount": 61.5,
+          "fbs_deliv_to_customer_amount": 60,
+          "fbs_return_flow_amount": 40
+        },
+        "acquiring": 18.4
       }
     ],
     "cursor": "synthetic-prices-2"

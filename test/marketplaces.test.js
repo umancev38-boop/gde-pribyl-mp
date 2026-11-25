@@ -55,7 +55,7 @@ test("Ozon snapshot paginates the full product catalogue and prices", async () =
             : { result: { items: [{ product_id: 989, offer_id: "SKU-3" }], last_id: "" } };
         }
         return body.cursor === ""
-          ? { items: [{ product_id: 987, offer_id: "SKU-1", price: { price: "1290", currency_code: "RUB" }, commissions: { sales_percent_fbo: 15, fbo_deliv_to_customer_amount: 80, internal: "drop" } }], cursor: "prices-page-2" }
+          ? { items: [{ product_id: 987, offer_id: "SKU-1", price: { price: "1290", currency_code: "RUB" }, acquiring: 18.4, commissions: { sales_percent_fbo: 15, fbo_deliv_to_customer_amount: 80, fbo_direct_flow_trans_min_amount: 31, fbo_direct_flow_trans_max_amount: 46.5, fbo_return_flow_amount: 50, fbs_first_mile_min_amount: 10, fbs_first_mile_max_amount: 25, fbs_direct_flow_trans_min_amount: 41, fbs_direct_flow_trans_max_amount: 61.5, fbs_deliv_to_customer_amount: 60, fbs_return_flow_amount: 40, internal: "drop" } }], cursor: "prices-page-2" }
           : { items: [{ product_id: 988, offer_id: "SKU-2", price: { price: "990", currency_code: "RUB" }, commissions: { sales_percent_fbo: 12 } }, { product_id: 989, offer_id: "SKU-3", price: { price: "1590", currency_code: "RUB" }, commissions: { sales_percent_fbo: 17 } }], cursor: "" };
       }
     };
@@ -69,6 +69,17 @@ test("Ozon snapshot paginates the full product catalogue and prices", async () =
   assert.equal(result.products, 3);
   assert.equal(result.items.length, 3);
   assert.equal(result.items[0].commissions.salesPercentFbo, 15);
+  assert.equal(result.items[0].acquiring, 18.4);
+  assert.equal(result.items[0].commissions.fboDirectFlowMin, 31);
+  assert.equal(result.items[0].commissions.fboDirectFlowMax, 46.5);
+  assert.equal(result.items[0].commissions.fboReturn, 50);
+  assert.equal(result.items[0].commissions.fbsFirstMileMin, 10);
+  assert.equal(result.items[0].commissions.fbsFirstMileMax, 25);
+  assert.equal(result.items[0].commissions.fbsDirectFlowMin, 41);
+  assert.equal(result.items[0].commissions.fbsDirectFlowMax, 61.5);
+  assert.equal(result.items[0].commissions.fbsDeliveryToCustomer, 60);
+  assert.equal(result.items[0].commissions.fbsReturn, 40);
+  assert.equal("fboFulfillment" in result.items[0].commissions, false);
   assert.equal("internal" in result.items[0].commissions, false);
 });
 

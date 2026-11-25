@@ -11,8 +11,11 @@
         "commissions": {
           "sales_percent_fbo": 12,
           "sales_percent_fbs": 14,
-          "fbo_deliv_to_customer_amount": 65
-        }
+          "fbo_deliv_to_customer_amount": 65,
+          "fbs_first_mile_min_amount": 8,
+          "fbs_first_mile_max_amount": 20
+        },
+        "acquiring": 12
       },
       {
         "product_id": 700003,

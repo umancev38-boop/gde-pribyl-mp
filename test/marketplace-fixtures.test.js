@@ -51,6 +51,17 @@ test("Ozon contract simulator follows product and price cursors across fixture p
   assert.equal(result.items[0].price, 1290);
   assert.equal(result.items[0].commissions.salesPercentFbo, 15.5);
   assert.equal(result.items[0].commissions.fboDeliveryToCustomer, 82.5);
+  assert.equal(result.items[0].acquiring, 18.4);
+  assert.equal(result.items[0].commissions.fboDirectFlowMin, 31);
+  assert.equal(result.items[0].commissions.fboDirectFlowMax, 46.5);
+  assert.equal(result.items[0].commissions.fboReturn, 50);
+  assert.equal(result.items[0].commissions.fbsFirstMileMin, 10);
+  assert.equal(result.items[0].commissions.fbsFirstMileMax, 25);
+  assert.equal(result.items[0].commissions.fbsDirectFlowMin, 41);
+  assert.equal(result.items[0].commissions.fbsDirectFlowMax, 61.5);
+  assert.equal(result.items[0].commissions.fbsDeliveryToCustomer, 60);
+  assert.equal(result.items[0].commissions.fbsReturn, 40);
+  assert.equal("fboFulfillment" in result.items[0].commissions, false);
   assert.equal(JSON.stringify(result).includes(credentials.apiKey), false);
 });
 

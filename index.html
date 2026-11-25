@@ -177,7 +177,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <div class="field"><label for="ozonScheme">Схема продажи</label><select id="ozonScheme"><option value="fbo">FBO</option><option value="fbs">FBS</option></select></div>
 <div class="accountActions"><button id="applyOzonCommission" type="button" disabled>Подставить комиссию в калькулятор</button></div>
 <p id="ozonApplyStatus" class="accountStatus" role="status" aria-live="polite">Комиссия будет подставлена только после выбора товара и схемы.</p>
-<p class="hint">Автоматически подставляется только процент комиссии. Логистика и возвраты остаются ручными: тарифные поля Ozon зависят от сценария и не суммируются без риска двойного учёта.</p>
+<p class="hint">Из Seller API v5 показываются отдельные составляющие: эквайринг, доставка до покупателя, транзитные диапазоны, первая миля FBS и возвраты. Калькулятор автоматически подставляет только процент комиссии. Не складывай все значения в одну строку логистики: это разные этапы, а часть диапазонов зависит от маршрута и может быть нулевой или предварительной. Итоговые расходы сверяй с начислениями в кабинете Ozon.</p>
 <p id="ozonTariffDetails" class="hint" style="white-space:pre-line;max-height:220px;overflow:auto"></p>
 </div>
 </div>
@@ -581,9 +581,9 @@ const ozonDemoSnapshot={
  fetchedAt:'DEMO',
  products:3,
  items:[
-  {productId:'900000001',offerId:'DEMO-MUG-01',price:1490,commissions:{salesPercentFbo:15,salesPercentFbs:18,fboDeliveryToCustomer:85,fboFulfillment:25,fboReturn:40,fbsFirstMileMin:35,fbsFirstMileMax:55}},
-  {productId:'900000002',offerId:'DEMO-LAMP-02',price:3290,commissions:{salesPercentFbo:12.5,salesPercentFbs:16,fboDeliveryToCustomer:110,fboFulfillment:32,fboReturn:55,fbsFirstMileMin:45,fbsFirstMileMax:70}},
-  {productId:'900000003',offerId:'DEMO-CASE-03',price:790,commissions:{salesPercentFbo:17,salesPercentFbs:20,fboDeliveryToCustomer:65,fboFulfillment:18,fboReturn:30,fbsFirstMileMin:25,fbsFirstMileMax:40}}
+  {productId:'900000001',offerId:'DEMO-MUG-01',price:1490,acquiring:18.4,commissions:{salesPercentFbo:15,salesPercentFbs:18,fboDeliveryToCustomer:85,fboDirectFlowMin:31,fboDirectFlowMax:46.5,fboReturn:40,fbsFirstMileMin:35,fbsFirstMileMax:55,fbsDirectFlowMin:41,fbsDirectFlowMax:61.5,fbsDeliveryToCustomer:60,fbsReturn:40}},
+  {productId:'900000002',offerId:'DEMO-LAMP-02',price:3290,acquiring:25.2,commissions:{salesPercentFbo:12.5,salesPercentFbs:16,fboDeliveryToCustomer:110,fboDirectFlowMin:42,fboDirectFlowMax:58,fboReturn:55,fbsFirstMileMin:45,fbsFirstMileMax:70,fbsDirectFlowMin:52,fbsDirectFlowMax:72,fbsDeliveryToCustomer:80,fbsReturn:55}},
+  {productId:'900000003',offerId:'DEMO-CASE-03',price:790,acquiring:9.8,commissions:{salesPercentFbo:17,salesPercentFbs:20,fboDeliveryToCustomer:65,fboDirectFlowMin:24,fboDirectFlowMax:34,fboReturn:30,fbsFirstMileMin:25,fbsFirstMileMax:40,fbsDirectFlowMin:31,fbsDirectFlowMax:44,fbsDeliveryToCustomer:50,fbsReturn:30}}
  ]
 };
 function getOzonItems(){return (ozonDemoActive?ozonDemoSnapshot:marketplaceState.ozon?.snapshot)?.items||[]}
@@ -635,7 +635,7 @@ function renderOzonSnapshot(snapshot){
  if(!snapshot?.items?.length){node.textContent=snapshot?.note||'';refreshOzonProductOptions();return}
  node.textContent='Примеры полученных данных (первые 8 товаров):\\n'+snapshot.items.slice(0,8).map(item=>{
   const c=item.commissions||{};
-  return (item.offerId||item.productId)+' · FBO '+(c.salesPercentFbo??'—')+'% / FBS '+(c.salesPercentFbs??'—')+'% · доставка FBO '+(c.fboDeliveryToCustomer??'—')+' ₽ · обработка FBO '+(c.fboFulfillment??'—')+' ₽';
+  return (item.offerId||item.productId)+' · комиссия FBO/FBS '+(c.salesPercentFbo??'—')+'/'+(c.salesPercentFbs??'—')+'% · эквайринг '+(item.acquiring??'—')+' ₽ · FBO доставка/транзит мин–макс/возврат '+(c.fboDeliveryToCustomer??'—')+'/'+(c.fboDirectFlowMin??'—')+'–'+(c.fboDirectFlowMax??'—')+'/'+(c.fboReturn??'—')+' ₽ · FBS первая миля мин–макс/транзит мин–макс/доставка/возврат '+(c.fbsFirstMileMin??'—')+'–'+(c.fbsFirstMileMax??'—')+'/'+(c.fbsDirectFlowMin??'—')+'–'+(c.fbsDirectFlowMax??'—')+'/'+(c.fbsDeliveryToCustomer??'—')+'/'+(c.fbsReturn??'—')+' ₽';
  }).join('\\n');
  refreshOzonProductOptions();
 }
