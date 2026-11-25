@@ -54,6 +54,22 @@ test("backup restore rolls back all local datasets if any storage write fails", 
 });
 
 
+test("cloud sync cannot write a stale account response into the newly selected account", () => {
+  const sync = html.slice(html.indexOf("async function syncAccount"), html.indexOf("const marketplaceState"));
+  assert.match(sync, /const syncUserId=String\(accountUser\.id\),syncScope=storageScope/);
+  assert.match(sync, /const ensureCurrentAccount=\(\)=>/);
+  const initialRead = sync.indexOf("let cloud=await apiRequest('/api/account/data')");
+  assert.ok(initialRead >= 0);
+  assert.ok(sync.indexOf("ensureCurrentAccount()", initialRead) > initialRead);
+  const save = sync.indexOf("saved=await apiRequest('/api/account/data'");
+  assert.ok(save >= 0);
+  assert.ok(sync.indexOf("ensureCurrentAccount()", save) > save);
+  const localWrite = sync.indexOf("if(!writeStore(PRODUCT_KEY,products)");
+  assert.ok(localWrite >= 0);
+  assert.ok(sync.lastIndexOf("ensureCurrentAccount()", localWrite) > save);
+  assert.match(sync, /if\(String\(accountUser\?\.id\?\?'\'\)===syncUserId&&storageScope===syncScope\)setAccountStatus/);
+});
+
 test("cloud sync deduplicates records regardless of JSON object key order", () => {
   const sync = html.slice(html.indexOf("function stableSerialize"), html.indexOf("async function syncAccount"));
   assert.match(sync, /Object\.keys\(value\)\.sort\(\)/);
