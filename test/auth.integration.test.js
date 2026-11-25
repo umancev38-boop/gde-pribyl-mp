@@ -128,7 +128,7 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
 
     const paymentAttempt = await request("/api/payments/create", {
       method: "POST",
-      headers: { Cookie: "gpm_session=" + firstCookie },
+      headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
       body: JSON.stringify({ plan: "pro" })
     });
     assert.equal(paymentAttempt.status, 503, "Payments must remain disabled without Robokassa credentials");
