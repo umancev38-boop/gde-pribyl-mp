@@ -640,11 +640,17 @@ function mergeUnique(localRows,cloudRows){
 }
 async function syncAccount(){
  if(!accountUser)return setAccountStatus('Сначала войди в аккаунт.',true);
+ const syncUserId=String(accountUser.id),syncScope=storageScope;
+ const ensureCurrentAccount=()=>{
+  if(String(accountUser?.id??'')!==syncUserId||storageScope!==syncScope)throw new Error('Аккаунт изменился во время синхронизации. Запусти синхронизацию повторно.');
+ };
  const button=el('syncAccount');button.disabled=true;button.textContent='Синхронизация…';
  try{
   let cloud=await apiRequest('/api/account/data');
+  ensureCurrentAccount();
   let products,history,saved,deletedIds;
   for(let attempt=0;attempt<3;attempt++){
+   ensureCurrentAccount();
    deletedIds=[...new Set([...readStore(DELETED_KEY),...(cloud.deletedIds||[])])];
    const deletedSet=new Set(deletedIds);
    products=mergeUnique(ensureRecordIds(PRODUCT_KEY),cloud.products||[]).filter(item=>!deletedSet.has(item.id));
@@ -654,17 +660,22 @@ async function syncAccount(){
    }
    try{
     saved=await apiRequest('/api/account/data',{method:'PUT',body:JSON.stringify({products,history,deletedIds,expectedVersion:cloud.version})});
+    ensureCurrentAccount();
     break;
    }catch(error){
     if(error.status!==409||attempt===2)throw error;
     cloud=await apiRequest('/api/account/data');
+    ensureCurrentAccount();
    }
   }
   if(!saved)throw new Error('Данные часто меняются на другом устройстве. Повтори синхронизацию через несколько секунд.');
+  ensureCurrentAccount();
   if(!writeStore(PRODUCT_KEY,products)||!writeStore(HISTORY_KEY,history)||!writeStore(DELETED_KEY,deletedIds))throw new Error('Облако сохранено, но локальное хранилище не обновилось. Перезагрузи страницу и повтори синхронизацию.');
   renderRecords();renderBusinessDashboard();
   setAccountStatus('Синхронизация завершена. Товаров: '+saved.productCount+', расчётов: '+saved.historyCount+', удалений синхронизировано: '+deletedIds.length+'. Версия облака: '+saved.version+'.');
- }catch(error){setAccountStatus(error.message,true)}
+ }catch(error){
+  if(String(accountUser?.id??'')===syncUserId&&storageScope===syncScope)setAccountStatus(error.message,true);
+ }
  finally{button.disabled=false;button.textContent='Синхронизировать данные'}
 }
 el('syncAccount').addEventListener('click',syncAccount);
