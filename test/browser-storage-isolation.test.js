@@ -100,3 +100,13 @@ test("marketplace connect, refresh and disconnect ignore responses from a previo
     assert.match(block, /if\(isMarketplaceContextCurrent\(context\)\)/, name + " guards UI updates");
   }
 });
+
+
+test("reset example button restores every calculator field and recalculates results", () => {
+  assert.match(html, /<button id="reset"[^>]*type="button">Сбросить пример<\/button>/);
+  assert.match(html, /const EXAMPLE_DEFAULTS=\{market:'Wildberries',price:'2490',cost:'800',commission:'15',logistics:'250',ads:'200',other:'140',storage:'0',packaging:'0',returns:'0',tax:'6',quantity:'1'\}/);
+  const reset = html.slice(html.indexOf("function resetExample"), html.indexOf("function snapshot"));
+  assert.match(reset, /field\.value=EXAMPLE_DEFAULTS\[id\]/);
+  assert.match(reset, /calc\(\)/);
+  assert.match(reset, /addEventListener\('click',resetExample\)/);
+});
