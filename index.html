@@ -577,10 +577,10 @@ function marketplaceSnapshotLabel(provider,snapshot){
 function renderOzonSnapshot(snapshot){
  const node=el('ozonTariffDetails');
  if(!snapshot?.items?.length){node.textContent=snapshot?.note||'';return}
- node.textContent='Примеры полученных данных (первые 8 товаров):\\n'+snapshot.items.slice(0,8).map(item=>{
+ node.textContent='Примеры полученных данных (первые 8 товаров):\n'+snapshot.items.slice(0,8).map(item=>{
   const c=item.commissions||{};
   return (item.offerId||item.productId)+' · FBO '+(c.salesPercentFbo??'—')+'% / FBS '+(c.salesPercentFbs??'—')+'% · доставка FBO '+(c.fboDeliveryToCustomer??'—')+' ₽ · обработка FBO '+(c.fboFulfillment??'—')+' ₽';
- }).join('\\n');
+ }).join('\n');
 }
 function renderMarketplaceState(){
  const allowed=Boolean(accountUser)&&hasPlan('pro');
