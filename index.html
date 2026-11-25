@@ -238,7 +238,7 @@ let PRODUCT_KEY=PRODUCT_KEY_BASE, HISTORY_KEY=HISTORY_KEY_BASE;
 const DELETED_KEY_BASE='gde_pribyl_mp_deleted_v1';
 let DELETED_KEY=DELETED_KEY_BASE;
 const recordsPanel=document.querySelector('.records');recordsPanel.style.display='none';
-const BACKUP_VERSION=1;
+const BACKUP_VERSION=2;
 let currentPlan='free';
 const PLAN_LIMITS={free:{products:5,history:20},pro:{products:200,history:1000},business:{products:5000,history:10000}};
 const PLAN_RANK={free:0,pro:1,business:2};
@@ -293,7 +293,7 @@ function renderRecords(){
 el('saveProduct').addEventListener('click',()=>{if(readStore(PRODUCT_KEY).length>=(accountLimits?.products??PLAN_LIMITS[currentPlan].products)){alert('Лимит товаров тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const name=prompt('Название товара:');if(!name||!name.trim())return;const all=readStore(PRODUCT_KEY);all.push({...data,id:crypto.randomUUID(),name:name.trim()});if(writeStore(PRODUCT_KEY,all)){renderRecords();renderBusinessDashboard();el('saveProduct').textContent='Сохранено';setTimeout(()=>el('saveProduct').textContent='Сохранить товар',1400)}});
 el('saveCalc').addEventListener('click',()=>{if(readStore(HISTORY_KEY).length>=(accountLimits?.history??PLAN_LIMITS[currentPlan].history)){alert('Лимит истории тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const all=readStore(HISTORY_KEY);all.push({...data,id:crypto.randomUUID()});if(writeStore(HISTORY_KEY,all)){renderRecords();el('saveCalc').textContent='Добавлено';setTimeout(()=>el('saveCalc').textContent='В историю',1400)}});
 el('exportData').addEventListener('click',()=>{
- const backup={app:'Где прибыль МП',backupVersion:BACKUP_VERSION,createdAt:new Date().toISOString(),products:readStore(PRODUCT_KEY),history:readStore(HISTORY_KEY)};
+ const backup={app:'Где прибыль МП',backupVersion:BACKUP_VERSION,createdAt:new Date().toISOString(),products:ensureRecordIds(PRODUCT_KEY),history:ensureRecordIds(HISTORY_KEY),deletedIds:readStore(DELETED_KEY)};
  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='gde-pribyl-mp-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);el('backupStatus').textContent='Резервная копия подготовлена. Проверь папку «Файлы» на iPhone.';
 });
 el('importData').addEventListener('change',async event=>{
@@ -303,9 +303,11 @@ el('importData').addEventListener('change',async event=>{
   const raw=await file.text();
   if(new TextEncoder().encode(raw).length>1800000)throw new Error('Размер резервной копии превышает 1,8 МБ.');
   const data=JSON.parse(raw);
-  if(data.app!=='Где прибыль МП'||data.backupVersion!==BACKUP_VERSION||!Array.isArray(data.products)||!Array.isArray(data.history))throw new Error('Неверный формат резервной копии.');
+  if(data.app!=='Где прибыль МП'||![1,BACKUP_VERSION].includes(data.backupVersion)||!Array.isArray(data.products)||!Array.isArray(data.history))throw new Error('Неверный формат резервной копии.');
   const limits=accountLimits||PLAN_LIMITS[currentPlan];
   if(data.products.length>limits.products||data.history.length>limits.history)throw new Error('Резервная копия превышает лимиты текущего тарифа. Данные не изменены.');
+  const importedDeletedIds=data.backupVersion>=2?data.deletedIds:[];
+  if(!Array.isArray(importedDeletedIds)||importedDeletedIds.length>50000||importedDeletedIds.some(id=>typeof id!=='string'||id.length<1||id.length>128))throw new Error('Список удалённых записей в резервной копии повреждён.');
   const validRows=(arr,isProduct)=>arr.every(item=>{
    if(!item||typeof item!=='object'||Array.isArray(item)||!item.values||typeof item.values!=='object'||Array.isArray(item.values)||typeof item.market!=='string')return false;
    if(isProduct&&(typeof item.name!=='string'||!item.name.trim()))return false;
@@ -313,13 +315,15 @@ el('importData').addEventListener('change',async event=>{
   });
   if(!validRows(data.products,true)||!validRows(data.history,false))throw new Error('Файл повреждён или имеет неподдерживаемую структуру.');
   if(!confirm('Восстановить резервную копию? Текущие товары и история будут заменены данными из файла.'))return;
-  const previousProducts=localStorage.getItem(PRODUCT_KEY),previousHistory=localStorage.getItem(HISTORY_KEY);
+  const previousProducts=localStorage.getItem(PRODUCT_KEY),previousHistory=localStorage.getItem(HISTORY_KEY),previousDeleted=localStorage.getItem(DELETED_KEY);
   try{
    localStorage.setItem(PRODUCT_KEY,JSON.stringify(data.products));
    localStorage.setItem(HISTORY_KEY,JSON.stringify(data.history));
+   localStorage.setItem(DELETED_KEY,JSON.stringify(importedDeletedIds));
   }catch(storageError){
    try{previousProducts===null?localStorage.removeItem(PRODUCT_KEY):localStorage.setItem(PRODUCT_KEY,previousProducts)}catch{}
    try{previousHistory===null?localStorage.removeItem(HISTORY_KEY):localStorage.setItem(HISTORY_KEY,previousHistory)}catch{}
+   try{previousDeleted===null?localStorage.removeItem(DELETED_KEY):localStorage.setItem(DELETED_KEY,previousDeleted)}catch{}
    throw new Error('Не удалось полностью восстановить данные. Предыдущие записи сохранены, если браузер разрешил откат.');
   }
   renderRecords();renderBusinessDashboard();
