@@ -127,7 +127,10 @@ function configReady() {
 
 async function initDb() {
   if (!pool) throw new Error("DATABASE_URL is not configured");
-  await pool.query(`
+  const client=await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock(73291428615001)");
+    await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id BIGSERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
@@ -202,7 +205,11 @@ async function initDb() {
     );
     ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id);
     CREATE INDEX IF NOT EXISTS subscriptions_user_expiry_idx ON subscriptions(user_id, expires_at DESC);
-  `);
+    `);
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(73291428615001)").catch(()=>{});
+    client.release();
+  }
 }
 
 
