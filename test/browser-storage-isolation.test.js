@@ -57,5 +57,6 @@ test("backup restore rolls back all local datasets if any storage write fails", 
 test("cloud sync deduplicates records regardless of JSON object key order", () => {
   const sync = html.slice(html.indexOf("function stableSerialize"), html.indexOf("async function syncAccount"));
   assert.match(sync, /Object\.keys\(value\)\.sort\(\)/);
-  assert.match(sync, /map\.set\(stableSerialize\(item\),item\)/);
+  assert.match(sync, /const key=item&&typeof item.id==='string'\?'id:'\+item.id/);
+  assert.match(sync, /if\(!map.has\(key\)\)map.set\(key,item\)/);
 });
