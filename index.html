@@ -264,7 +264,14 @@ function calc(){
  el('validation').textContent=valid?'Важно: предварительная модель. Тарифы WB подставляются только после загрузки официальных JSON-ответов API. Ozon и другие площадки пока рассчитываются по введённым вручную ставкам. Проверь актуальные удержания в кабинете продавца.':'Проверь данные: цена должна быть больше нуля; расходы не могут быть отрицательными; комиссия и налог должны быть от 0 до 100%, а вместе меньше 100%; количество продаж должно быть целым числом не меньше 1.';
  return {market:el('market').value,price:p,cost:c,commission:raw.commission,logistics:l,ads:a,other:o,storage:s,packaging:pack,returns:ret,tax:raw.tax,quantity:q,profit,margin,total:profit*q,expenses,breakeven:be,valid};
 }
-ids.forEach(id=>el(id).addEventListener('input',calc));el('reset').addEventListener('click',()=>{['Wildberries','2490','800','15','250','200','140','0','0','0','6','1'].forEach((v,i)=>el(ids[i]).value=v);calc()});
+const EXAMPLE_DEFAULTS={market:'Wildberries',price:'2490',cost:'800',commission:'15',logistics:'250',ads:'200',other:'140',storage:'0',packaging:'0',returns:'0',tax:'6',quantity:'1'};
+function resetExample(){
+ for(const id of ids){const field=el(id);if(!field)continue;field.value=EXAMPLE_DEFAULTS[id];}
+ calc();
+ el('reset').blur();
+}
+ids.forEach(id=>el(id).addEventListener('input',calc));
+el('reset').addEventListener('click',resetExample);
 function snapshot(){const x=calc();return {...x,values:Object.fromEntries(ids.map(id=>[id,el(id).value])),savedAt:new Date().toISOString()}}
 function legacyRecordId(item,namespace){
  const input=namespace+':'+stableSerialize(item);let hash=0xcbf29ce484222325n;
