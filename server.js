@@ -358,6 +358,7 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
     if(Buffer.byteLength(JSON.stringify({products,history,deletedIds}),"utf8")>1800000) return res.status(413).json({error:"Размер данных превышает 1,8 МБ."});
     if([...products,...history].some(x=>!x||typeof x!=="object"||Array.isArray(x))) return res.status(400).json({error:"Некорректная запись данных."});
     const client=await pool.connect();
+    let activeProducts=products,activeHistory=history;
     let conflictVersion=null,versionConflict=false;
     try {
       await client.query("BEGIN");
@@ -372,8 +373,8 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
         if(deletedIds.length) await client.query("INSERT INTO user_data_tombstones(user_id,record_id) SELECT $1,value FROM jsonb_array_elements_text($2::jsonb) AS value ON CONFLICT(user_id,record_id) DO NOTHING",[req.user.id,JSON.stringify(deletedIds)]);
         const allDeleted=await client.query("SELECT record_id FROM user_data_tombstones WHERE user_id=$1",[req.user.id]);
         const deletedSet=new Set(allDeleted.rows.map(row=>row.record_id));
-        const activeProducts=products.filter(row=>!deletedSet.has(row.id));
-        const activeHistory=history.filter(row=>!deletedSet.has(row.id));
+        activeProducts=products.filter(row=>!deletedSet.has(row.id));
+        activeHistory=history.filter(row=>!deletedSet.has(row.id));
         await client.query("DELETE FROM user_products WHERE user_id=$1",[req.user.id]);
         await client.query("DELETE FROM user_history WHERE user_id=$1",[req.user.id]);
         if(activeProducts.length) await client.query("INSERT INTO user_products(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(activeProducts)]);
