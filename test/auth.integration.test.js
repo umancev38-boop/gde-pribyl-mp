@@ -234,6 +234,7 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     const restored = await afterLogin.json();
     assert.deepEqual(restored.products, deletionData.products);
     assert.deepEqual(restored.history, deletionData.history);
+    assert.deepEqual(restored.deletedIds, ["p0", "h0"], "deletion tombstones must survive logout and login");
 
     // Verify marketplace records are isolated by user_id, even for two paid accounts.
     testPool = new pg.Pool({ connectionString: databaseUrl });
@@ -266,6 +267,7 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     const otherData = await otherAccountData.json();
     assert.deepEqual(otherData.products, [], "a new account must not read another user's products");
     assert.deepEqual(otherData.history, [], "a new account must not read another user's history");
+    assert.deepEqual(otherData.deletedIds, [], "a new account must not read another user's deletion tombstones");
 
     const ownerDataAfterOtherRead = await request("/api/account/data", {
       headers: { Cookie: "gpm_session=" + secondCookie }
@@ -307,6 +309,17 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     assert.equal(ownerAfterOtherDisconnect.status, 200);
     assert.equal((await ownerAfterOtherDisconnect.json()).connections.ozon.connected, true,
       "another user must not be able to disconnect the owner's marketplace");
+
+    const legacyRow = { name: "Legacy row without ID", market: "Wildberries", price: 100 };
+    await testPool.query("INSERT INTO user_products(user_id,data) VALUES($1,$2::jsonb)", [registrationData.user.id, JSON.stringify(legacyRow)]);
+    const migratedOnceResponse = await request("/api/account/data", { headers: { Cookie: "gpm_session=" + secondCookie } });
+    const migratedOnce = await migratedOnceResponse.json();
+    const migratedOnceRow = migratedOnce.products.find(item => item.name === legacyRow.name);
+    assert.match(migratedOnceRow.id, /^legacy:[0-9a-f]{16}$/, "legacy records must receive deterministic IDs");
+    const migratedAgainResponse = await request("/api/account/data", { headers: { Cookie: "gpm_session=" + secondCookie } });
+    const migratedAgain = await migratedAgainResponse.json();
+    assert.equal(migratedAgain.products.find(item => item.name === legacyRow.name).id, migratedOnceRow.id,
+      "legacy ID migration must remain stable across reads");
   } finally {
     await testPool?.end();
     child.kill("SIGTERM");
