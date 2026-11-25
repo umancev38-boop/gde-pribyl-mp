@@ -457,7 +457,7 @@ app.get("/health", async (_req, res) => {
   });
 });
 
-app.post("/api/payments/create", rateLimit({ max: 8 }), requireUser, async (req, res) => {
+app.post("/api/payments/create", rateLimit({ max: 8 }), requireUser, sameOrigin, async (req, res) => {
   if (!configReady()) {
     return res.status(503).json({ error: "Платежи пока не настроены на сервере." });
   }
