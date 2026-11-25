@@ -170,7 +170,14 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <div class="field"><label for="ozonClientId">Client-Id</label><input id="ozonClientId" type="text" autocomplete="off" placeholder="Client-Id из кабинета Ozon"></div>
 <div class="field"><label for="ozonApiKey">Seller API-ключ · Product read-only</label><input id="ozonApiKey" type="password" autocomplete="off" placeholder="Вставь API-ключ Ozon"></div>
 <div class="accountActions"><button id="connectOzon" type="button">Подключить Ozon</button><button id="refreshOzon" class="secondary" type="button" hidden>Обновить данные</button><button id="disconnectOzon" class="secondary" type="button" hidden>Отключить</button></div>
-<p id="ozonConnectionStatus" class="accountStatus" role="status" aria-live="polite">Не подключён.</p><p id="ozonTariffDetails" class="hint" style="white-space:pre-line;max-height:220px;overflow:auto"></p>
+<p id="ozonConnectionStatus" class="accountStatus" role="status" aria-live="polite">Не подключён.</p>
+<div class="field"><label for="ozonProductSearch">Найти товар по артикулу или ID</label><input id="ozonProductSearch" type="search" autocomplete="off" placeholder="Начни вводить артикул или ID"></div>
+<div class="field"><label for="ozonProductSelect">Товар из каталога Ozon</label><select id="ozonProductSelect" disabled><option value="">Сначала подключи Ozon</option></select></div>
+<div class="field"><label for="ozonScheme">Схема продажи</label><select id="ozonScheme"><option value="fbo">FBO</option><option value="fbs">FBS</option></select></div>
+<div class="accountActions"><button id="applyOzonCommission" type="button" disabled>Подставить комиссию в калькулятор</button></div>
+<p id="ozonApplyStatus" class="accountStatus" role="status" aria-live="polite">Комиссия будет подставлена только после выбора товара и схемы.</p>
+<p class="hint">Автоматически подставляется только процент комиссии. Логистика и возвраты остаются ручными: тарифные поля Ozon зависят от сценария и не суммируются без риска двойного учёта.</p>
+<p id="ozonTariffDetails" class="hint" style="white-space:pre-line;max-height:220px;overflow:auto"></p>
 </div>
 </div>
 <p id="marketplaceSummary" class="accountMeta">Сначала войди в аккаунт с активным тарифом PRO или BUSINESS.</p>
@@ -574,13 +581,49 @@ function marketplaceSnapshotLabel(provider,snapshot){
  if(provider==='wildberries')return 'Подключён · категорий: '+(snapshot.categories?.length||0)+', складов: '+(snapshot.warehouses?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
  return 'Подключён · товаров в каталоге: '+(snapshot.products||0)+', строк с комиссиями: '+(snapshot.items?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
 }
+function refreshOzonProductOptions(){
+ const items=marketplaceState.ozon?.snapshot?.items||[];
+ const query=el('ozonProductSearch').value.trim().toLocaleLowerCase('ru-RU');
+ const matches=items.filter(item=>{
+  const text=[item.offerId,item.productId].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
+  return !query||text.includes(query);
+ }).slice(0,100);
+ const select=el('ozonProductSelect');
+ select.replaceChildren();
+ if(!matches.length){
+  select.add(new Option(items.length?'Совпадений не найдено':'Каталог Ozon ещё не загружен',''));
+  select.disabled=true;
+ }else{
+  matches.forEach(item=>select.add(new Option((item.offerId||'Без артикула')+' · ID '+item.productId,String(item.productId))));
+  select.disabled=false;
+ }
+ el('applyOzonCommission').disabled=!matches.some(item=>item.commissions);
+ if(items.length>100&&matches.length===100)el('ozonApplyStatus').textContent='Показаны первые 100 совпадений. Уточни поиск, чтобы найти нужный товар.';
+}
+function applyOzonCommission(){
+ const productId=el('ozonProductSelect').value;
+ const item=(marketplaceState.ozon?.snapshot?.items||[]).find(row=>String(row.productId)===productId);
+ if(!item){el('ozonApplyStatus').textContent='Выбери товар из загруженного каталога.';return}
+ const scheme=el('ozonScheme').value;
+ const raw=scheme==='fbo'?item.commissions?.salesPercentFbo:item.commissions?.salesPercentFbs;
+ const rate=raw===null||raw===undefined?NaN:Number(raw);
+ if(!Number.isFinite(rate)||rate<0||rate>100){
+  el('ozonApplyStatus').textContent='Для выбранного товара нет корректной комиссии '+scheme.toUpperCase()+'. Значение не подставлено.';
+  return;
+ }
+ el('market').value='Ozon';
+ el('commission').value=String(rate);
+ calc();
+ el('ozonApplyStatus').textContent='Подставлена комиссия '+rate+'% для '+(item.offerId||('товара '+item.productId))+' ('+scheme.toUpperCase()+'). Логистика, хранение и возвраты не изменены.';
+}
 function renderOzonSnapshot(snapshot){
  const node=el('ozonTariffDetails');
- if(!snapshot?.items?.length){node.textContent=snapshot?.note||'';return}
- node.textContent='Примеры полученных данных (первые 8 товаров):\n'+snapshot.items.slice(0,8).map(item=>{
+ if(!snapshot?.items?.length){node.textContent=snapshot?.note||'';refreshOzonProductOptions();return}
+ node.textContent='Примеры полученных данных (первые 8 товаров):\\n'+snapshot.items.slice(0,8).map(item=>{
   const c=item.commissions||{};
   return (item.offerId||item.productId)+' · FBO '+(c.salesPercentFbo??'—')+'% / FBS '+(c.salesPercentFbs??'—')+'% · доставка FBO '+(c.fboDeliveryToCustomer??'—')+' ₽ · обработка FBO '+(c.fboFulfillment??'—')+' ₽';
- }).join('\n');
+ }).join('\\n');
+ refreshOzonProductOptions();
 }
 function renderMarketplaceState(){
  const allowed=Boolean(accountUser)&&hasPlan('pro');
@@ -647,6 +690,8 @@ async function disconnectMarketplace(provider){
 }
 el('connectWb').addEventListener('click',()=>connectMarketplace('wildberries'));
 el('connectOzon').addEventListener('click',()=>connectMarketplace('ozon'));
+el('ozonProductSearch').addEventListener('input',refreshOzonProductOptions);
+el('applyOzonCommission').addEventListener('click',applyOzonCommission);
 el('refreshWb').addEventListener('click',()=>refreshMarketplace('wildberries'));
 el('refreshOzon').addEventListener('click',()=>refreshMarketplace('ozon'));
 el('disconnectWb').addEventListener('click',()=>disconnectMarketplace('wildberries'));
