@@ -266,14 +266,14 @@ function calc(){
 }
 ids.forEach(id=>el(id).addEventListener('input',calc));el('reset').addEventListener('click',()=>{['Wildberries','2490','800','15','250','200','140','0','0','0','6','1'].forEach((v,i)=>el(ids[i]).value=v);calc()});
 function snapshot(){const x=calc();return {...x,values:Object.fromEntries(ids.map(id=>[id,el(id).value])),savedAt:new Date().toISOString()}}
-function legacyRecordId(item){
- const input=stableSerialize(item);let hash=0xcbf29ce484222325n;
+function legacyRecordId(item,namespace){
+ const input=namespace+':'+stableSerialize(item);let hash=0xcbf29ce484222325n;
  for(let i=0;i<input.length;i++){hash^=BigInt(input.charCodeAt(i));hash=BigInt.asUintN(64,hash*0x100000001b3n)}
  return 'legacy:'+hash.toString(16).padStart(16,'0');
 }
 function ensureRecordIds(key){
  const rows=readStore(key);let changed=false;
- rows.forEach(item=>{if(!item.id){item.id=legacyRecordId(item);changed=true}});
+ rows.forEach(item=>{if(!item.id){item.id=legacyRecordId(item,key===PRODUCT_KEY?'products':'history');changed=true}});
  if(changed)writeStore(key,rows);
  return rows;
 }
@@ -632,7 +632,10 @@ function stableSerialize(value){
 }
 function mergeUnique(localRows,cloudRows){
  const map=new Map();
- [...cloudRows,...localRows].forEach(item=>map.set(stableSerialize(item),item));
+ [...cloudRows,...localRows].forEach(item=>{
+  const key=item&&typeof item.id==='string'?'id:'+item.id:'legacy:'+stableSerialize(item);
+  if(!map.has(key))map.set(key,item);
+ });
  return [...map.values()];
 }
 async function syncAccount(){

@@ -29,6 +29,12 @@ test("account switching restores only that profile's local data", () => {
 });
 
 
+test("sync uses collection-scoped legacy IDs and preserves re-added identical records", () => {
+  assert.match(html, /legacyRecordId\(item,key===PRODUCT_KEY\?'products':'history'\)/);
+  assert.match(html, /const key=item&&typeof item.id==='string'\?'id:'\+item.id/);
+  assert.match(html, /filter\(item=>!deletedSet.has\(item.id\)\)/);
+});
+
 test("backup restore validates size, shape, quotas and calculator values before writing", () => {
   assert.match(html, /if\(file\.size>1800000\)/);
   assert.match(html, /new TextEncoder\(\)\.encode\(raw\)\.length>1800000/);
@@ -51,5 +57,6 @@ test("backup restore rolls back all local datasets if any storage write fails", 
 test("cloud sync deduplicates records regardless of JSON object key order", () => {
   const sync = html.slice(html.indexOf("function stableSerialize"), html.indexOf("async function syncAccount"));
   assert.match(sync, /Object\.keys\(value\)\.sort\(\)/);
-  assert.match(sync, /map\.set\(stableSerialize\(item\),item\)/);
+  assert.match(sync, /const key=item&&typeof item.id==='string'\?'id:'\+item.id/);
+  assert.match(sync, /if\(!map.has\(key\)\)map.set\(key,item\)/);
 });
