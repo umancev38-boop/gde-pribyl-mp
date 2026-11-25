@@ -105,3 +105,40 @@ test("marketplace API rejects null and primitive JSON payloads on successful res
     );
   }
 });
+
+
+test("Ozon rejects structurally incomplete product pages instead of treating them as empty", async () => {
+  const cases = [
+    { result: { last_id: "" } },
+    { result: { items: [] } },
+    { result: { items: "not-an-array", last_id: "" } },
+    { result: { items: [{ offer_id: "missing-id" }], last_id: "" } }
+  ];
+  for (const payload of cases) {
+    await assert.rejects(
+      fetchMarketplaceSnapshot("ozon", { clientId: "123", apiKey: "x".repeat(24) }, async () => ({
+        ok: true, status: 200, json: async () => payload
+      })),
+      /неполную структуру каталога|без корректного ID/
+    );
+  }
+});
+
+test("Ozon rejects structurally incomplete price pages instead of returning partial snapshots", async () => {
+  const cases = [
+    { result: { items: [] } },
+    { result: { items: "not-an-array", cursor: "" } },
+    { result: { items: [{ offer_id: "missing-id" }], cursor: "" } }
+  ];
+  for (const payload of cases) {
+    await assert.rejects(
+      fetchMarketplaceSnapshot("ozon", { clientId: "123", apiKey: "x".repeat(24) }, async url => ({
+        ok: true, status: 200,
+        json: async () => url.endsWith("/v3/product/list")
+          ? { result: { items: [{ product_id: 7 }], last_id: "" } }
+          : payload
+      })),
+      /неполную структуру цен|без корректного ID/
+    );
+  }
+});
