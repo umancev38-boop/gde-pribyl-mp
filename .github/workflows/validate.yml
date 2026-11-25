@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [work/version-1-0-business-capacity, fix/auth-db-smoke-and-entitlements]
+    branches: [main, work/version-1-0-business-capacity, fix/auth-db-smoke-and-entitlements]
 jobs:
   validate:
     runs-on: ubuntu-latest
