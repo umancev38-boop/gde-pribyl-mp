@@ -645,7 +645,7 @@ function renderMarketplaceState(){
  for(const provider of ['wildberries','ozon']){
   const prefix=provider==='wildberries'?'Wb':'Ozon';
   const state=marketplaceState[provider];
-  if(provider==='ozon')renderOzonSnapshot(state?.snapshot);
+  if(provider==='ozon')renderOzonSnapshot(ozonDemoActive?ozonDemoSnapshot:state?.snapshot);
   el('refresh'+prefix).hidden=!state?.connected;
   el('disconnect'+prefix).hidden=!state?.connected;
   const statusNode=el(provider==='wildberries'?'wbConnectionStatus':'ozonConnectionStatus');
@@ -662,7 +662,7 @@ function renderMarketplaceState(){
   :'Подключение доступно после входа на тарифе PRO или BUSINESS.';
 }
 async function loadMarketplaceConnections(){
- if(!accountUser||!hasPlan('pro')){marketplaceState.wildberries=null;marketplaceState.ozon=null;renderMarketplaceState();return}
+ if(!accountUser||!hasPlan('pro')){marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;renderMarketplaceState();return}
  try{
   const data=await apiRequest('/api/marketplaces');
   marketplaceState.wildberries=data.connections?.wildberries||null;
