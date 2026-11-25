@@ -170,7 +170,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <div class="field"><label for="ozonClientId">Client-Id</label><input id="ozonClientId" type="text" autocomplete="off" placeholder="Client-Id из кабинета Ozon"></div>
 <div class="field"><label for="ozonApiKey">Seller API-ключ · Product read-only</label><input id="ozonApiKey" type="password" autocomplete="off" placeholder="Вставь API-ключ Ozon"></div>
 <div class="accountActions"><button id="connectOzon" type="button">Подключить Ozon</button><button id="refreshOzon" class="secondary" type="button" hidden>Обновить данные</button><button id="disconnectOzon" class="secondary" type="button" hidden>Отключить</button></div>
-<p id="ozonConnectionStatus" class="accountStatus" role="status" aria-live="polite">Не подключён.</p>
+<p id="ozonConnectionStatus" class="accountStatus" role="status" aria-live="polite">Не подключён.</p><p id="ozonTariffDetails" class="hint" style="white-space:pre-line;max-height:220px;overflow:auto"></p>
 </div>
 </div>
 <p id="marketplaceSummary" class="accountMeta">Сначала войди в аккаунт с активным тарифом PRO или BUSINESS.</p>
@@ -572,7 +572,15 @@ function marketplaceLabel(provider){return provider==='wildberries'?'Wildberries
 function marketplaceSnapshotLabel(provider,snapshot){
  if(!snapshot)return 'Подключён. Данные ещё не обновлялись.';
  if(provider==='wildberries')return 'Подключён · категорий: '+(snapshot.categories?.length||0)+', складов: '+(snapshot.warehouses?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
- return 'Подключён · товаров: '+(snapshot.products||0)+', получено строк с комиссиями: '+(snapshot.items?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
+ return 'Подключён · проверена первая страница каталога (до 100 товаров): '+(snapshot.products||0)+', строк с комиссиями: '+(snapshot.items?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
+}
+function renderOzonSnapshot(snapshot){
+ const node=el('ozonTariffDetails');
+ if(!snapshot?.items?.length){node.textContent=snapshot?.note||'';return}
+ node.textContent='Примеры полученных данных (первые 8 товаров):\\n'+snapshot.items.slice(0,8).map(item=>{
+  const c=item.commissions||{};
+  return (item.offerId||item.productId)+' · FBO '+(c.salesPercentFbo??'—')+'% / FBS '+(c.salesPercentFbs??'—')+'% · доставка FBO '+(c.fboDeliveryToCustomer??'—')+' ₽ · обработка FBO '+(c.fboFulfillment??'—')+' ₽';
+ }).join('\\n');
 }
 function renderMarketplaceState(){
  const allowed=Boolean(accountUser)&&hasPlan('pro');
@@ -580,6 +588,7 @@ function renderMarketplaceState(){
  for(const provider of ['wildberries','ozon']){
   const prefix=provider==='wildberries'?'Wb':'Ozon';
   const state=marketplaceState[provider];
+  if(provider==='ozon')renderOzonSnapshot(state?.snapshot);
   el('refresh'+prefix).hidden=!state?.connected;
   el('disconnect'+prefix).hidden=!state?.connected;
   el(provider==='wildberries'?'wbConnectionStatus':'ozonConnectionStatus').textContent=state?.connected
