@@ -16,5 +16,8 @@ test("account switching restores only that profile's local data", () => {
   assert.match(html, /setStorageScope\(accountUser\?\.id\?\?null\)/);
   assert.match(html, /setStorageScope\(null\);renderRecords\(\)/);
   assert.match(html, /recordsPanel\.style\.display='none'/);
+  assert.match(html, /loadMarketplaceConnections/);
+  assert.match(html, /marketplaceLoadGeneration/);
+  assert.match(html, /generation!==marketplaceLoadGeneration/);
   assert.match(html, /recordsPanel\.style\.display='';renderRecords\(\)/);
 });
