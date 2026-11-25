@@ -232,8 +232,8 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     });
     assert.equal(afterLogin.status, 200);
     const restored = await afterLogin.json();
-    assert.deepEqual(restored.products, products);
-    assert.deepEqual(restored.history, history);
+    assert.deepEqual(restored.products, deletionData.products);
+    assert.deepEqual(restored.history, deletionData.history);
 
     // Verify marketplace records are isolated by user_id, even for two paid accounts.
     testPool = new pg.Pool({ connectionString: databaseUrl });
@@ -272,8 +272,8 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     });
     assert.equal(ownerDataAfterOtherRead.status, 200);
     const ownerData = await ownerDataAfterOtherRead.json();
-    assert.deepEqual(ownerData.products, products);
-    assert.deepEqual(ownerData.history, history);
+    assert.deepEqual(ownerData.products, deletionData.products);
+    assert.deepEqual(ownerData.history, deletionData.history);
 
     await activatePro(otherRegistrationData.user.id);
 
