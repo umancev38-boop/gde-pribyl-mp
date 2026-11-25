@@ -235,6 +235,8 @@ const ids=['market','price','cost','commission','logistics','ads','other','stora
 const PRODUCT_KEY_BASE='gde_pribyl_mp_products_v04', HISTORY_KEY_BASE='gde_pribyl_mp_history_v04';
 let storageScope='guest';
 let PRODUCT_KEY=PRODUCT_KEY_BASE, HISTORY_KEY=HISTORY_KEY_BASE;
+const DELETED_KEY_BASE='gde_pribyl_mp_deleted_v1';
+let DELETED_KEY=DELETED_KEY_BASE;
 const recordsPanel=document.querySelector('.records');recordsPanel.style.display='none';
 const BACKUP_VERSION=1;
 let currentPlan='free';
@@ -264,17 +266,32 @@ function calc(){
 }
 ids.forEach(id=>el(id).addEventListener('input',calc));el('reset').addEventListener('click',()=>{['Wildberries','2490','800','15','250','200','140','0','0','0','6','1'].forEach((v,i)=>el(ids[i]).value=v);calc()});
 function snapshot(){const x=calc();return {...x,values:Object.fromEntries(ids.map(id=>[id,el(id).value])),savedAt:new Date().toISOString()}}
+function legacyRecordId(item){
+ const input=stableSerialize(item);let hash=0xcbf29ce484222325n;
+ for(let i=0;i<input.length;i++){hash^=BigInt(input.charCodeAt(i));hash=BigInt.asUintN(64,hash*0x100000001b3n)}
+ return 'legacy:'+hash.toString(16).padStart(16,'0');
+}
+function ensureRecordIds(key){
+ const rows=readStore(key);let changed=false;
+ rows.forEach(item=>{if(!item.id){item.id=legacyRecordId(item);changed=true}});
+ if(changed)writeStore(key,rows);
+ return rows;
+}
+function addDeletedId(id){
+ const deleted=readStore(DELETED_KEY);if(!deleted.includes(id)){deleted.push(id);if(!writeStore(DELETED_KEY,deleted))return false}
+ return true;
+}
 function renderRecords(){
- const products=readStore(PRODUCT_KEY),history=readStore(HISTORY_KEY);
+ const products=ensureRecordIds(PRODUCT_KEY),history=ensureRecordIds(HISTORY_KEY);
  const productRoot=el('productsList'),historyRoot=el('historyList');
  productRoot.replaceChildren();historyRoot.replaceChildren();
  if(!products.length)productRoot.innerHTML='<p class="empty">Пока нет сохранённых товаров.</p>';
- products.forEach((item,i)=>{const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=item.name;const sub=document.createElement('small');sub.textContent=item.market+' · '+money(item.price);info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(PRODUCT_KEY);all.splice(i,1);if(writeStore(PRODUCT_KEY,all)){renderRecords();renderBusinessDashboard()}});actions.append(load,del);node.append(info,actions);productRoot.append(node)});
+ products.forEach((item,i)=>{const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=item.name;const sub=document.createElement('small');sub.textContent=item.market+' · '+money(item.price);info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(PRODUCT_KEY);const removed=all[i];if(removed&&!addDeletedId(removed.id))return;all.splice(i,1);if(writeStore(PRODUCT_KEY,all)){renderRecords();renderBusinessDashboard()}});actions.append(load,del);node.append(info,actions);productRoot.append(node)});
  if(!history.length)historyRoot.innerHTML='<p class="empty">Расчёты пока не сохранены.</p>';
- history.slice().reverse().forEach((item,reverseIndex)=>{const actualIndex=history.length-1-reverseIndex;const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=money(item.profit)+' / шт.';const sub=document.createElement('small');sub.textContent=item.market+' · '+new Date(item.savedAt).toLocaleString('ru-RU');info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(HISTORY_KEY);all.splice(actualIndex,1);if(writeStore(HISTORY_KEY,all))renderRecords()});actions.append(load,del);node.append(info,actions);historyRoot.append(node)});
+ history.slice().reverse().forEach((item,reverseIndex)=>{const actualIndex=history.length-1-reverseIndex;const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=money(item.profit)+' / шт.';const sub=document.createElement('small');sub.textContent=item.market+' · '+new Date(item.savedAt).toLocaleString('ru-RU');info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(HISTORY_KEY);const removed=all[actualIndex];if(removed&&!addDeletedId(removed.id))return;all.splice(actualIndex,1);if(writeStore(HISTORY_KEY,all))renderRecords()});actions.append(load,del);node.append(info,actions);historyRoot.append(node)});
 }
-el('saveProduct').addEventListener('click',()=>{if(readStore(PRODUCT_KEY).length>=(accountLimits?.products??PLAN_LIMITS[currentPlan].products)){alert('Лимит товаров тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const name=prompt('Название товара:');if(!name||!name.trim())return;const all=readStore(PRODUCT_KEY);all.push({...data,name:name.trim()});if(writeStore(PRODUCT_KEY,all)){renderRecords();renderBusinessDashboard();el('saveProduct').textContent='Сохранено';setTimeout(()=>el('saveProduct').textContent='Сохранить товар',1400)}});
-el('saveCalc').addEventListener('click',()=>{if(readStore(HISTORY_KEY).length>=(accountLimits?.history??PLAN_LIMITS[currentPlan].history)){alert('Лимит истории тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const all=readStore(HISTORY_KEY);all.push(data);if(writeStore(HISTORY_KEY,all)){renderRecords();el('saveCalc').textContent='Добавлено';setTimeout(()=>el('saveCalc').textContent='В историю',1400)}});
+el('saveProduct').addEventListener('click',()=>{if(readStore(PRODUCT_KEY).length>=(accountLimits?.products??PLAN_LIMITS[currentPlan].products)){alert('Лимит товаров тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const name=prompt('Название товара:');if(!name||!name.trim())return;const all=readStore(PRODUCT_KEY);all.push({...data,id:crypto.randomUUID(),name:name.trim()});if(writeStore(PRODUCT_KEY,all)){renderRecords();renderBusinessDashboard();el('saveProduct').textContent='Сохранено';setTimeout(()=>el('saveProduct').textContent='Сохранить товар',1400)}});
+el('saveCalc').addEventListener('click',()=>{if(readStore(HISTORY_KEY).length>=(accountLimits?.history??PLAN_LIMITS[currentPlan].history)){alert('Лимит истории тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const all=readStore(HISTORY_KEY);all.push({...data,id:crypto.randomUUID()});if(writeStore(HISTORY_KEY,all)){renderRecords();el('saveCalc').textContent='Добавлено';setTimeout(()=>el('saveCalc').textContent='В историю',1400)}});
 el('exportData').addEventListener('click',()=>{
  const backup={app:'Где прибыль МП',backupVersion:BACKUP_VERSION,createdAt:new Date().toISOString(),products:readStore(PRODUCT_KEY),history:readStore(HISTORY_KEY)};
  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='gde-pribyl-mp-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);el('backupStatus').textContent='Резервная копия подготовлена. Проверь папку «Файлы» на iPhone.';
@@ -327,7 +344,7 @@ function setStorageScope(userId){
  renderMarketplaceState();
  storageScope=next;
  const suffix=storageScope==='guest'?'':'_'+storageScope;
- PRODUCT_KEY=PRODUCT_KEY_BASE+suffix;HISTORY_KEY=HISTORY_KEY_BASE+suffix;
+ PRODUCT_KEY=PRODUCT_KEY_BASE+suffix;HISTORY_KEY=HISTORY_KEY_BASE+suffix;DELETED_KEY=DELETED_KEY_BASE+suffix;
  WB_COMMISSION_KEY=WB_COMMISSION_KEY_BASE+suffix;WB_BOX_KEY=WB_BOX_KEY_BASE+suffix;
  wbCommissions=null;wbBoxRates=null;
  try{
@@ -609,9 +626,10 @@ function stableSerialize(value){
  if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+stableSerialize(value[key])).join(',')+'}';
  return JSON.stringify(value);
 }
+function recordContentKey(item){const copy={...item};delete copy.id;return stableSerialize(copy)}
 function mergeUnique(localRows,cloudRows){
  const map=new Map();
- [...cloudRows,...localRows].forEach(item=>map.set(stableSerialize(item),item));
+ [...cloudRows,...localRows].forEach(item=>{const key=recordContentKey(item);if(!map.has(key))map.set(key,item)});
  return [...map.values()];
 }
 async function syncAccount(){
@@ -619,15 +637,17 @@ async function syncAccount(){
  const button=el('syncAccount');button.disabled=true;button.textContent='Синхронизация…';
  try{
   let cloud=await apiRequest('/api/account/data');
-  let products,history,saved;
+  let products,history,saved,deletedIds;
   for(let attempt=0;attempt<3;attempt++){
-   products=mergeUnique(readStore(PRODUCT_KEY),cloud.products||[]);
-   history=mergeUnique(readStore(HISTORY_KEY),cloud.history||[]);
+   deletedIds=[...new Set([...readStore(DELETED_KEY),...(cloud.deletedIds||[])])];
+   const deletedSet=new Set(deletedIds);
+   products=mergeUnique(ensureRecordIds(PRODUCT_KEY),cloud.products||[]).filter(item=>!deletedSet.has(item.id));
+   history=mergeUnique(ensureRecordIds(HISTORY_KEY),cloud.history||[]).filter(item=>!deletedSet.has(item.id));
    if(products.length>accountLimits.products||history.length>accountLimits.history){
     throw new Error('После объединения получится '+products.length+' товаров и '+history.length+' расчётов. Лимиты тарифа: '+accountLimits.products+' и '+accountLimits.history+'. Данные не изменены.');
    }
    try{
-    saved=await apiRequest('/api/account/data',{method:'PUT',body:JSON.stringify({products,history,expectedVersion:cloud.version})});
+    saved=await apiRequest('/api/account/data',{method:'PUT',body:JSON.stringify({products,history,deletedIds,expectedVersion:cloud.version})});
     break;
    }catch(error){
     if(error.status!==409||attempt===2)throw error;
@@ -635,9 +655,9 @@ async function syncAccount(){
    }
   }
   if(!saved)throw new Error('Данные часто меняются на другом устройстве. Повтори синхронизацию через несколько секунд.');
-  if(!writeStore(PRODUCT_KEY,products)||!writeStore(HISTORY_KEY,history))throw new Error('Облако сохранено, но локальное хранилище не обновилось. Перезагрузи страницу и повтори синхронизацию.');
+  if(!writeStore(PRODUCT_KEY,products)||!writeStore(HISTORY_KEY,history)||!writeStore(DELETED_KEY,deletedIds))throw new Error('Облако сохранено, но локальное хранилище не обновилось. Перезагрузи страницу и повтори синхронизацию.');
   renderRecords();renderBusinessDashboard();
-  setAccountStatus('Синхронизация завершена. Товаров: '+saved.productCount+', расчётов: '+saved.historyCount+'. Версия облака: '+saved.version+'.');
+  setAccountStatus('Синхронизация завершена. Товаров: '+saved.productCount+', расчётов: '+saved.historyCount+', удалений синхронизировано: '+deletedIds.length+'. Версия облака: '+saved.version+'.');
  }catch(error){setAccountStatus(error.message,true)}
  finally{button.disabled=false;button.textContent='Синхронизировать данные'}
 }
