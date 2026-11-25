@@ -61,7 +61,7 @@ test("Ozon snapshot paginates the full product catalogue and prices", async () =
     };
   };
   const result = await fetchMarketplaceSnapshot("ozon", { clientId: "123", apiKey: "x".repeat(24) }, fetcher);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 4, JSON.stringify(calls));
   assert.equal(calls[0].body.limit, 1000);
   assert.equal(calls[1].body.last_id, "page-2");
   assert.deepEqual(calls[2].body.filter.product_id, ["987", "988", "989"]);
