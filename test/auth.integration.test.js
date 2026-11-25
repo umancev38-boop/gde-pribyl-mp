@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "../lib/entitlements.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -146,5 +147,47 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
   } finally {
     child.kill("SIGTERM");
     await Promise.race([new Promise(resolve => child.once("exit", resolve)), wait(3000)]);
+  }
+});
+
+
+test("published product and calculation limits remain stable", () => {
+  assert.deepEqual(PLAN_ENTITLEMENTS.free, { products: 5, history: 20, analytics: false, csvExport: false, targetMargin: false });
+  assert.deepEqual(PLAN_ENTITLEMENTS.pro, { products: 200, history: 1000, analytics: false, csvExport: false, targetMargin: true });
+  assert.deepEqual(PLAN_ENTITLEMENTS.business, { products: 5000, history: 10000, analytics: true, csvExport: true, targetMargin: true });
+});
+
+test("feature access matches the published plans", () => {
+  assert.equal(PLAN_ENTITLEMENTS.free.analytics, false);
+  assert.equal(PLAN_ENTITLEMENTS.pro.analytics, false);
+  assert.equal(PLAN_ENTITLEMENTS.business.analytics, true);
+  assert.equal(PLAN_ENTITLEMENTS.free.csvExport, false);
+  assert.equal(PLAN_ENTITLEMENTS.pro.csvExport, false);
+  assert.equal(PLAN_ENTITLEMENTS.business.csvExport, true);
+  assert.equal(PLAN_ENTITLEMENTS.free.targetMargin, false);
+  assert.equal(PLAN_ENTITLEMENTS.pro.targetMargin, true);
+  assert.equal(PLAN_ENTITLEMENTS.business.targetMargin, true);
+});
+
+test("plan normalization fails closed to FREE", () => {
+  assert.equal(normalizePlanCode("FREE"), "free");
+  assert.equal(normalizePlanCode(" Pro "), "pro");
+  assert.equal(normalizePlanCode("BUSINESS"), "business");
+  for (const invalid of [undefined, null, "", "enterprise", "admin", 42, {}]) {
+    assert.equal(normalizePlanCode(invalid), "free");
+  }
+});
+
+test("limit boundary and over-limit cases are enforced", () => {
+  const cases = [
+    ["free", 5, 20, true], ["free", 6, 20, false], ["free", 5, 21, false],
+    ["pro", 200, 1000, true], ["pro", 201, 1000, false], ["pro", 200, 1001, false],
+    ["business", 5000, 10000, true], ["business", 5001, 10000, false], ["business", 5000, 10001, false]
+  ];
+  for (const [plan, products, history, expected] of cases) {
+    assert.equal(isWithinPlanLimits(plan, products, history), expected, plan + " " + products + "/" + history);
+  }
+  for (const [products, history] of [[-1, 0], [0, -1], [1.5, 0], [0, 2.5], [NaN, 0], [0, Infinity]]) {
+    assert.equal(isWithinPlanLimits("business", products, history), false);
   }
 });
