@@ -27,9 +27,10 @@ app.use((req, res, next) => {
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 30;
-const rateBuckets = new Map();
-
 function rateLimit({ windowMs = RATE_LIMIT_WINDOW_MS, max = RATE_LIMIT_MAX } = {}) {
+  // Each route gets an independent bucket. Sharing one IP bucket across
+  // unrelated endpoints lets login attempts exhaust marketplace/payment limits.
+  const rateBuckets = new Map();
   return (req, res, next) => {
     const now = Date.now();
     const key = String(req.ip || req.socket.remoteAddress || "unknown");
