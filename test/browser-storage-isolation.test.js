@@ -76,3 +76,27 @@ test("cloud sync deduplicates records regardless of JSON object key order", () =
   assert.match(sync, /const key=item&&typeof item.id==='string'\?'id:'\+item.id/);
   assert.match(sync, /if\(!map.has\(key\)\)map.set\(key,item\)/);
 });
+
+
+test("marketplace connect, refresh and disconnect ignore responses from a previous account", () => {
+  assert.match(html, /function captureMarketplaceContext\(\)/);
+  assert.match(html, /function isMarketplaceContextCurrent\(context\)/);
+  assert.match(html, /context\.generation===marketplaceLoadGeneration/);
+  assert.match(html, /storageScope===context\.scope/);
+  const scopeSwitch = html.slice(html.indexOf("function setStorageScope"), html.indexOf("const parseWBNumber"));
+  assert.match(scopeSwitch, /marketplaceLoadGeneration\+\+/);
+  assert.match(scopeSwitch, /button\.disabled=false/);
+  for (const [name, nextName] of [
+    ["connectMarketplace", "refreshMarketplace"],
+    ["refreshMarketplace", "disconnectMarketplace"],
+    ["disconnectMarketplace", "el('connectWb')"]
+  ]) {
+    const start = html.indexOf("async function " + name);
+    const end = html.indexOf(nextName.startsWith("el(") ? nextName : "async function " + nextName, start + 1);
+    assert.ok(start >= 0 && end > start, name + " block exists");
+    const block = html.slice(start, end);
+    assert.match(block, /const context=captureMarketplaceContext\(\)/, name + " captures request scope");
+    assert.match(block, /if\(!isMarketplaceContextCurrent\(context\)\)return/, name + " ignores stale response");
+    assert.match(block, /if\(isMarketplaceContextCurrent\(context\)\)/, name + " guards UI updates");
+  }
+});
