@@ -154,6 +154,12 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS user_history_user_idx ON user_history(user_id);
+    CREATE TABLE IF NOT EXISTS user_data_tombstones (
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      record_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, record_id)
+    );
     CREATE TABLE IF NOT EXISTS user_data_versions (
       user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       version BIGINT NOT NULL DEFAULT 0,
@@ -199,6 +205,18 @@ async function initDb() {
   `);
 }
 
+
+function stableRecordSerialize(value) {
+  if (Array.isArray(value)) return "[" + value.map(stableRecordSerialize).join(",") + "]";
+  if (value && typeof value === "object") return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + stableRecordSerialize(value[key])).join(",") + "}";
+  return JSON.stringify(value);
+}
+function legacyRecordId(value) {
+  const input=stableRecordSerialize(value);
+  let hash=0xcbf29ce484222325n;
+  for(let i=0;i<input.length;i++){hash^=BigInt(input.charCodeAt(i));hash=BigInt.asUintN(64,hash*0x100000001b3n);}
+  return "legacy:"+hash.toString(16).padStart(16,"0");
+}
 
 const SESSION_COOKIE = "gpm_session";
 const SESSION_DAYS = 30;
@@ -298,29 +316,49 @@ app.post("/api/auth/logout",sameOrigin,async(req,res)=>{
 app.get("/api/account/data",requireUser,async(req,res)=>{
   try {
     const [products,history,plan]=await Promise.all([
-      pool.query("SELECT data FROM user_products WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
-      pool.query("SELECT data FROM user_history WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
+      pool.query("SELECT data,ctid::text AS row_id FROM user_products WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
+      pool.query("SELECT data,ctid::text AS row_id FROM user_history WHERE user_id=$1 ORDER BY created_at",[req.user.id]),
       accountPlan(req.user.id)
     ]);
+    const migrateLegacyRows=async(table,rows)=>{
+      const result=[];
+      for(const row of rows){
+        let data=row.data;
+        if(!data.id){data={...data,id:legacyRecordId(data)};await pool.query("UPDATE "+table+" SET data=$1::jsonb WHERE user_id=$2 AND ctid=$3::tid",[JSON.stringify(data),req.user.id,row.row_id]);}
+        result.push(data);
+      }
+      return result;
+    };
+    const [productRows,historyRows]=await Promise.all([
+      migrateLegacyRows("user_products",products.rows),
+      migrateLegacyRows("user_history",history.rows)
+    ]);
     await pool.query("INSERT INTO user_data_versions(user_id,version) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING",[req.user.id]);
-    const version=await pool.query("SELECT version FROM user_data_versions WHERE user_id=$1",[req.user.id]);
+    const [version,tombstones]=await Promise.all([
+      pool.query("SELECT version FROM user_data_versions WHERE user_id=$1",[req.user.id]),
+      pool.query("SELECT record_id FROM user_data_tombstones WHERE user_id=$1",[req.user.id])
+    ]);
+    const deletedIds=tombstones.rows.map(row=>row.record_id);
+    const deletedSet=new Set(deletedIds);
     res.setHeader("Cache-Control","no-store, private");
-    res.json({products:products.rows.map(x=>x.data),history:history.rows.map(x=>x.data),version:Number(version.rows[0].version),...plan});
+    res.json({products:productRows.filter(row=>!deletedSet.has(row.id)),history:historyRows.filter(row=>!deletedSet.has(row.id)),deletedIds,version:Number(version.rows[0].version),...plan});
   } catch(error) {
     console.error("Account data read failed:",error.message);
     res.status(500).json({error:"Не удалось загрузить данные аккаунта."});
   }
 });
 app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
-  const products=req.body?.products,history=req.body?.history,expectedVersion=req.body?.expectedVersion;
+  const products=req.body?.products,history=req.body?.history,expectedVersion=req.body?.expectedVersion,deletedIds=req.body?.deletedIds??[];
   if(!Array.isArray(products)||!Array.isArray(history)) return res.status(400).json({error:"Ожидаются массивы products и history."});
   if(!Number.isSafeInteger(expectedVersion)||expectedVersion<0) return res.status(400).json({error:"Ожидается корректная версия данных expectedVersion."});
+  if(!Array.isArray(deletedIds)||deletedIds.length>50000||deletedIds.some(id=>typeof id!=="string"||id.length<1||id.length>128)) return res.status(400).json({error:"Некорректный список удалённых записей."});
   try {
     const plan=await accountPlan(req.user.id);
     if(!isWithinPlanLimits(plan.plan,products.length,history.length)) return res.status(403).json({error:"Лимит тарифа превышен.",plan:plan.plan,limits:plan.limits});
-    if(Buffer.byteLength(JSON.stringify({products,history}),"utf8")>1800000) return res.status(413).json({error:"Размер данных превышает 1,8 МБ."});
+    if(Buffer.byteLength(JSON.stringify({products,history,deletedIds}),"utf8")>1800000) return res.status(413).json({error:"Размер данных превышает 1,8 МБ."});
     if([...products,...history].some(x=>!x||typeof x!=="object"||Array.isArray(x))) return res.status(400).json({error:"Некорректная запись данных."});
     const client=await pool.connect();
+    let activeProducts=products,activeHistory=history;
     let conflictVersion=null,versionConflict=false;
     try {
       await client.query("BEGIN");
@@ -332,10 +370,15 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
         versionConflict=true;
         await client.query("ROLLBACK");
       } else {
+        if(deletedIds.length) await client.query("INSERT INTO user_data_tombstones(user_id,record_id) SELECT $1,value FROM jsonb_array_elements_text($2::jsonb) AS value ON CONFLICT(user_id,record_id) DO NOTHING",[req.user.id,JSON.stringify(deletedIds)]);
+        const allDeleted=await client.query("SELECT record_id FROM user_data_tombstones WHERE user_id=$1",[req.user.id]);
+        const deletedSet=new Set(allDeleted.rows.map(row=>row.record_id));
+        activeProducts=products.filter(row=>!deletedSet.has(row.id));
+        activeHistory=history.filter(row=>!deletedSet.has(row.id));
         await client.query("DELETE FROM user_products WHERE user_id=$1",[req.user.id]);
         await client.query("DELETE FROM user_history WHERE user_id=$1",[req.user.id]);
-        if(products.length) await client.query("INSERT INTO user_products(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(products)]);
-        if(history.length) await client.query("INSERT INTO user_history(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(history)]);
+        if(activeProducts.length) await client.query("INSERT INTO user_products(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(activeProducts)]);
+        if(activeHistory.length) await client.query("INSERT INTO user_history(user_id,data) SELECT $1,value FROM jsonb_array_elements($2::jsonb) AS value",[req.user.id,JSON.stringify(activeHistory)]);
         const updated=await client.query("UPDATE user_data_versions SET version=version+1,updated_at=NOW() WHERE user_id=$1 RETURNING version",[req.user.id]);
         await client.query("COMMIT");
         conflictVersion=Number(updated.rows[0].version);
@@ -343,7 +386,7 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
     } catch(error) { await client.query("ROLLBACK").catch(()=>{});throw error; }
     finally { client.release(); }
     if(versionConflict) return res.status(409).json({error:"Данные изменились на другом устройстве. Загрузи актуальную версию и повтори синхронизацию.",code:"SYNC_VERSION_CONFLICT",currentVersion:conflictVersion});
-    res.json({saved:true,version:conflictVersion,productCount:products.length,historyCount:history.length,plan:plan.plan,limits:plan.limits});
+    res.json({saved:true,version:conflictVersion,productCount:activeProducts.length,historyCount:activeHistory.length,deletedCount:deletedIds.length,plan:plan.plan,limits:plan.limits});
   } catch(error) {
     console.error("Account data save failed:",error.message);
     res.status(500).json({error:"Не удалось сохранить данные аккаунта."});
