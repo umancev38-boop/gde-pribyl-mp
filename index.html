@@ -34,6 +34,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 
 .pricing{margin:20px 0}.pricingIntro{color:var(--muted);margin:-8px 0 16px;font-size:13px}.priceGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.priceCard{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fff}.priceCard h3{margin:0 0 5px;font-size:16px}.priceValue{font-size:25px;font-weight:850;letter-spacing:-.03em}.priceCard p{font-size:13px;color:var(--muted);margin:8px 0 0}.priceNote{font-size:12px;color:var(--muted);margin-top:12px}.legalLinks{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}.legalLinks a{color:#315b43;text-decoration:none;font-weight:650}.legalLinks a:hover{text-decoration:underline}.serviceDescription{margin:0 0 16px;padding:14px;background:#f5f8fa;border:1px solid var(--line);border-radius:12px}.serviceDescription p{font-size:13px;color:var(--muted);margin:6px 0}.consentRow{display:flex;gap:9px;align-items:flex-start;max-width:680px;margin:12px 0;font-size:12px;color:var(--muted)}.consentRow input{width:auto;margin-top:4px}.siteDetails{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted)}.siteDetails p{margin:4px 0}
 @media(max-width:760px){.priceGrid{grid-template-columns:1fr}}
+.portfolioTable{width:100%;border-collapse:collapse;font-size:13px}.portfolioTable th,.portfolioTable td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.portfolioTable th{color:var(--muted);font-weight:700}.portfolioTableWrap{overflow-x:auto}.insightItem{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:8px 0;font-size:13px}.insightItem strong{display:block;margin-bottom:3px}.insightItem.warn{background:#fff8e8;border-color:#f2e3bd}.insightItem.good{background:#f2f7f4;border-color:#dcebe1}
 .accountPanel{margin:20px 0}.accountGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.accountActions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.accountMeta{font-size:13px;color:var(--muted);margin:8px 0}.accountStatus{font-size:13px;min-height:20px;margin-top:10px;color:var(--green)}.accountStatus.warn{color:#8a5b0b}@media(max-width:600px){.accountGrid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -192,6 +193,8 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <div class="metric"><span>Расчётная прибыль</span><strong id="portfolioProfit">0 ₽</strong></div>
 <div class="metric"><span>Расчётная выручка</span><strong id="portfolioRevenue">0 ₽</strong></div>
 <div class="metric"><span>Средняя маржинальность</span><strong id="portfolioMargin">—</strong></div></div>
+<div class="breakdown"><h3>Сравнение товаров</h3><p class="hint">Сопоставление сохранённых расчётов по прибыли, маржинальности и объёму продаж.</p><div id="portfolioComparison" class="portfolioTableWrap"></div></div>
+<div class="breakdown"><h3>Что требует внимания</h3><p class="hint">Подсказки формируются по введённым расходам и расчётной прибыли, а не по фактическим отчётам маркетплейса.</p><div id="portfolioInsights"></div></div>
 <div class="breakdown"><h3>Пять лидеров по расчётной прибыли</h3><div id="portfolioRanking" class="recordList"></div></div>
 <button id="exportPortfolioCsv" type="button">Экспорт ассортимента в CSV</button></div></section>
 </main>
@@ -374,10 +377,45 @@ function renderBusinessDashboard(){
  el('portfolioProfit').textContent=money(profit);
  el('portfolioRevenue').textContent=money(revenue);
  el('portfolioMargin').textContent=revenue>0?(profit/revenue*100).toFixed(1).replace('.',',')+'%':'—';
+ const sorted=products.slice().sort((a,b)=>(Number(b.total)||0)-(Number(a.total)||0));
  const root=el('portfolioRanking');root.replaceChildren();
- const top=products.slice().sort((a,b)=>(Number(b.total)||0)-(Number(a.total)||0)).slice(0,5);
- if(!top.length){root.textContent='Сохрани товары, чтобы увидеть рейтинг.';return}
- top.forEach((item,index)=>{const row=document.createElement('div');row.className='record';const name=document.createElement('strong');name.textContent=(index+1)+'. '+item.name;const value=document.createElement('b');value.textContent=money(Number(item.total)||0);row.append(name,value);root.append(row)});
+ const top=sorted.slice(0,5);
+ if(!top.length){root.textContent='Сохрани товары, чтобы увидеть рейтинг.'}
+ else top.forEach((item,index)=>{const row=document.createElement('div');row.className='record';const name=document.createElement('strong');name.textContent=(index+1)+'. '+String(item.name||'Без названия');const value=document.createElement('b');value.textContent=money(Number(item.total)||0);row.append(name,value);root.append(row)});
+ const comparison=el('portfolioComparison');comparison.replaceChildren();
+ if(!sorted.length){comparison.textContent='Пока нечего сравнивать.'}
+ else{
+  const table=document.createElement('table');table.className='portfolioTable';
+  const head=document.createElement('thead'),headRow=document.createElement('tr');
+  ['Товар','Площадка','Прибыль / шт.','Маржа','Продаж','Прибыль всего'].forEach(label=>{const th=document.createElement('th');th.textContent=label;headRow.append(th)});
+  head.append(headRow);table.append(head);
+  const body=document.createElement('tbody');
+  sorted.forEach(item=>{
+   const row=document.createElement('tr');
+   const values=[String(item.name||'Без названия'),String(item.market||'—'),money(Number(item.profit)||0),Number.isFinite(Number(item.margin))?Number(item.margin).toFixed(1).replace('.',',')+'%':'—',String(Number(item.quantity)||0),money(Number(item.total)||0)];
+   values.forEach(value=>{const td=document.createElement('td');td.textContent=value;row.append(td)});
+   body.append(row);
+  });
+  table.append(body);comparison.append(table);
+ }
+ const insights=el('portfolioInsights');insights.replaceChildren();
+ const loss=products.filter(item=>(Number(item.profit)||0)<0);
+ const thin=products.filter(item=>(Number(item.profit)||0)>=0&&Number.isFinite(Number(item.margin))&&Number(item.margin)<15);
+ const addInsight=(title,description,warn=true)=>{
+  const node=document.createElement('div');node.className='insightItem '+(warn?'warn':'good');
+  const strong=document.createElement('strong');strong.textContent=title;
+  const text=document.createElement('span');text.textContent=description;
+  node.append(strong,text);insights.append(node);
+ };
+ if(loss.length){
+  addInsight('Убыточные товары: '+loss.length,'Проверь закупочную цену, комиссию, логистику, рекламу, хранение и налог. В первую очередь: '+loss.slice(0,5).map(x=>String(x.name||'Без названия')+' ('+money(Number(x.profit)||0)+' / шт.)').join('; ')+'.');
+ }
+ if(thin.length){
+  addInsight('Низкая маржинальность: '+thin.length,'У этих товаров маржа ниже 15%. Проверь возможность изменить цену, снизить расходы или пересмотреть рекламные затраты: '+thin.slice(0,5).map(x=>String(x.name||'Без названия')+' ('+Number(x.margin).toFixed(1).replace('.',',')+'%)').join('; ')+'.');
+ }
+ if(!loss.length&&!thin.length){
+  addInsight('Критичных отклонений не найдено','По сохранённым расчётам нет товаров с отрицательной прибылью или маржой ниже 15%. Обновляй исходные тарифы и расходы перед принятием решений.',false);
+ }
 }
 function updatePlanUI(){
  const pro=hasPlan('pro'),business=hasPlan('business');
