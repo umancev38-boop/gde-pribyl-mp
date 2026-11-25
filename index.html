@@ -171,6 +171,7 @@ footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-
 <div class="field"><label for="ozonApiKey">Seller API-ключ · Product read-only</label><input id="ozonApiKey" type="password" autocomplete="off" placeholder="Вставь API-ключ Ozon"></div>
 <div class="accountActions"><button id="connectOzon" type="button">Подключить Ozon</button><button id="refreshOzon" class="secondary" type="button" hidden>Обновить данные</button><button id="disconnectOzon" class="secondary" type="button" hidden>Отключить</button></div>
 <p id="ozonConnectionStatus" class="accountStatus" role="status" aria-live="polite">Не подключён.</p>
+<div class="accountActions"><button id="showOzonDemo" class="secondary" type="button">Показать демо-данные без API-ключа</button><button id="exitOzonDemo" class="secondary" type="button" hidden>Закрыть демо</button></div>
 <div class="field"><label for="ozonProductSearch">Найти товар по артикулу или ID</label><input id="ozonProductSearch" type="search" autocomplete="off" placeholder="Начни вводить артикул или ID"></div>
 <div class="field"><label for="ozonProductSelect">Товар из каталога Ozon</label><select id="ozonProductSelect" disabled><option value="">Сначала подключи Ozon</option></select></div>
 <div class="field"><label for="ozonScheme">Схема продажи</label><select id="ozonScheme"><option value="fbo">FBO</option><option value="fbs">FBS</option></select></div>
@@ -575,6 +576,17 @@ async function syncAccount(){
 el('syncAccount').addEventListener('click',syncAccount);
 
 const marketplaceState={wildberries:null,ozon:null};
+let ozonDemoActive=false;
+const ozonDemoSnapshot={
+ fetchedAt:'DEMO',
+ products:3,
+ items:[
+  {productId:'900000001',offerId:'DEMO-MUG-01',price:1490,commissions:{salesPercentFbo:15,salesPercentFbs:18,fboDeliveryToCustomer:85,fboFulfillment:25,fboReturn:40,fbsFirstMileMin:35,fbsFirstMileMax:55}},
+  {productId:'900000002',offerId:'DEMO-LAMP-02',price:3290,commissions:{salesPercentFbo:12.5,salesPercentFbs:16,fboDeliveryToCustomer:110,fboFulfillment:32,fboReturn:55,fbsFirstMileMin:45,fbsFirstMileMax:70}},
+  {productId:'900000003',offerId:'DEMO-CASE-03',price:790,commissions:{salesPercentFbo:17,salesPercentFbs:20,fboDeliveryToCustomer:65,fboFulfillment:18,fboReturn:30,fbsFirstMileMin:25,fbsFirstMileMax:40}}
+ ]
+};
+function getOzonItems(){return (ozonDemoActive?ozonDemoSnapshot:marketplaceState.ozon?.snapshot)?.items||[]}
 function marketplaceLabel(provider){return provider==='wildberries'?'Wildberries':'Ozon'}
 function marketplaceSnapshotLabel(provider,snapshot){
  if(!snapshot)return 'Подключён. Данные ещё не обновлялись.';
@@ -582,7 +594,7 @@ function marketplaceSnapshotLabel(provider,snapshot){
  return 'Подключён · товаров в каталоге: '+(snapshot.products||0)+', строк с комиссиями: '+(snapshot.items?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
 }
 function refreshOzonProductOptions(){
- const items=marketplaceState.ozon?.snapshot?.items||[];
+ const items=getOzonItems();
  const query=el('ozonProductSearch').value.trim().toLocaleLowerCase('ru-RU');
  const matches=items.filter(item=>{
   const text=[item.offerId,item.productId].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
@@ -597,12 +609,14 @@ function refreshOzonProductOptions(){
   matches.forEach(item=>select.add(new Option((item.offerId||'Без артикула')+' · ID '+item.productId,String(item.productId))));
   select.disabled=false;
  }
- el('applyOzonCommission').disabled=!matches.some(item=>item.commissions);
+ el('applyOzonCommission').disabled=ozonDemoActive||!matches.some(item=>item.commissions);
+ if(ozonDemoActive)el('ozonApplyStatus').textContent='Демо-режим: данные синтетические, применение к калькулятору отключено.';
  if(items.length>100&&matches.length===100)el('ozonApplyStatus').textContent='Показаны первые 100 совпадений. Уточни поиск, чтобы найти нужный товар.';
 }
 function applyOzonCommission(){
+ if(ozonDemoActive){el('ozonApplyStatus').textContent='Это демонстрационные данные. Калькулятор не изменён. Для переноса комиссии подключи свой Ozon API.';return}
  const productId=el('ozonProductSelect').value;
- const item=(marketplaceState.ozon?.snapshot?.items||[]).find(row=>String(row.productId)===productId);
+ const item=getOzonItems().find(row=>String(row.productId)===productId);
  if(!item){el('ozonApplyStatus').textContent='Выбери товар из загруженного каталога.';return}
  const scheme=el('ozonScheme').value;
  const raw=scheme==='fbo'?item.commissions?.salesPercentFbo:item.commissions?.salesPercentFbs;
@@ -631,19 +645,24 @@ function renderMarketplaceState(){
  for(const provider of ['wildberries','ozon']){
   const prefix=provider==='wildberries'?'Wb':'Ozon';
   const state=marketplaceState[provider];
-  if(provider==='ozon')renderOzonSnapshot(state?.snapshot);
+  if(provider==='ozon')renderOzonSnapshot(ozonDemoActive?ozonDemoSnapshot:state?.snapshot);
   el('refresh'+prefix).hidden=!state?.connected;
   el('disconnect'+prefix).hidden=!state?.connected;
-  el(provider==='wildberries'?'wbConnectionStatus':'ozonConnectionStatus').textContent=state?.connected
-   ?marketplaceSnapshotLabel(provider,state.snapshot)
-   :state?.lastError||'Не подключён.';
+  const statusNode=el(provider==='wildberries'?'wbConnectionStatus':'ozonConnectionStatus');
+  statusNode.textContent=provider==='ozon'&&ozonDemoActive
+   ?'ДЕМО-РЕЖИМ: показаны синтетические данные. Ozon API не подключён, ключи не вводились и не сохранялись.'
+   :state?.connected?marketplaceSnapshotLabel(provider,state.snapshot):state?.lastError||'Не подключён.';
+  if(provider==='ozon'){
+   el('showOzonDemo').hidden=Boolean(state?.connected)||ozonDemoActive;
+   el('exitOzonDemo').hidden=!ozonDemoActive;
+  }
  }
  el('marketplaceSummary').textContent=allowed
   ?'Ключи не отображаются после сохранения. Для смены ключа введи новый и нажми «Подключить».'
   :'Подключение доступно после входа на тарифе PRO или BUSINESS.';
 }
 async function loadMarketplaceConnections(){
- if(!accountUser||!hasPlan('pro')){marketplaceState.wildberries=null;marketplaceState.ozon=null;renderMarketplaceState();return}
+ if(!accountUser||!hasPlan('pro')){marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;renderMarketplaceState();return}
  try{
   const data=await apiRequest('/api/marketplaces');
   marketplaceState.wildberries=data.connections?.wildberries||null;
@@ -664,7 +683,7 @@ async function connectMarketplace(provider){
  try{
   const data=await apiRequest('/api/marketplaces/'+provider+'/credentials',{method:'PUT',body:JSON.stringify(body)});
   marketplaceState[provider]={connected:true,snapshot:data.snapshot};
-  if(isWb){el('wbApiToken').value='';hydrateWbApiSnapshot(data.snapshot)}else{el('ozonClientId').value='';el('ozonApiKey').value=''}
+  if(isWb){el('wbApiToken').value='';hydrateWbApiSnapshot(data.snapshot)}else{ozonDemoActive=false;el('ozonClientId').value='';el('ozonApiKey').value=''}
   renderMarketplaceState();
  }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
  finally{button.disabled=false;button.textContent=isWb?'Подключить WB':'Подключить Ozon'}
@@ -674,7 +693,7 @@ async function refreshMarketplace(provider){
  button.disabled=true;button.textContent='Обновляем…';
  try{
   const data=await apiRequest('/api/marketplaces/'+provider+'/refresh',{method:'POST',body:'{}'});
-  marketplaceState[provider]={connected:true,snapshot:data.snapshot};if(isWb)hydrateWbApiSnapshot(data.snapshot);renderMarketplaceState();
+  marketplaceState[provider]={connected:true,snapshot:data.snapshot};if(isWb)hydrateWbApiSnapshot(data.snapshot);else ozonDemoActive=false;renderMarketplaceState();
  }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
  finally{button.disabled=false;button.textContent=isWb?'Обновить тарифы':'Обновить данные'}
 }
@@ -683,7 +702,7 @@ async function disconnectMarketplace(provider){
  button.disabled=true;
  try{
   await apiRequest('/api/marketplaces/'+provider,{method:'DELETE',body:'{}'});
-  marketplaceState[provider]=null;renderMarketplaceState();
+  marketplaceState[provider]=null;if(!isWb)ozonDemoActive=false;renderMarketplaceState();
   el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent='Подключение отключено. Ключ удалён с сервера.';
  }catch(error){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
  finally{button.disabled=false}
@@ -692,6 +711,8 @@ el('connectWb').addEventListener('click',()=>connectMarketplace('wildberries'));
 el('connectOzon').addEventListener('click',()=>connectMarketplace('ozon'));
 el('ozonProductSearch').addEventListener('input',refreshOzonProductOptions);
 el('applyOzonCommission').addEventListener('click',applyOzonCommission);
+el('showOzonDemo').addEventListener('click',()=>{ozonDemoActive=true;el('ozonProductSearch').value='';renderMarketplaceState()});
+el('exitOzonDemo').addEventListener('click',()=>{ozonDemoActive=false;el('ozonProductSearch').value='';renderMarketplaceState()});
 el('refreshWb').addEventListener('click',()=>refreshMarketplace('wildberries'));
 el('refreshOzon').addEventListener('click',()=>refreshMarketplace('ozon'));
 el('disconnectWb').addEventListener('click',()=>disconnectMarketplace('wildberries'));
