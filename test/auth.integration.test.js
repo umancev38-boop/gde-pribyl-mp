@@ -184,6 +184,24 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     });
     assert.equal(tooMuchHistory.status, 403);
 
+    const deletedSave = await request("/api/account/data", {
+      method: "PUT",
+      headers: { ...originHeader, Cookie: "gpm_session=" + firstCookie },
+      body: JSON.stringify({
+        products: [...products.slice(1), { ...products[0], id: "p-readded" }],
+        history: history.slice(1),
+        deletedIds: ["p0", "h0"],
+        expectedVersion: 1
+      })
+    });
+    assert.equal(deletedSave.status, 200);
+    const afterDeletion = await request("/api/account/data", { headers: { Cookie: "gpm_session=" + firstCookie } });
+    const deletionData = await afterDeletion.json();
+    assert.ok(!deletionData.products.some(item => item.id === "p0"), "deleted product must stay deleted");
+    assert.ok(!deletionData.history.some(item => item.id === "h0"), "deleted history row must stay deleted");
+    assert.ok(deletionData.products.some(item => item.id === "p-readded"), "a re-added identical product with a new ID must remain active");
+    assert.deepEqual(new Set(deletionData.deletedIds), new Set(["p0", "h0"]));
+
     const duplicate = await request("/api/auth/register", {
       method: "POST",
       headers: originHeader,
