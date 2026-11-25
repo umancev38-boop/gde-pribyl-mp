@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { fetchMarketplaceSnapshot } from "../../lib/marketplaces.js";
+import { fetchMarketplaceSnapshot } from "../lib/marketplaces.js";
 
 const fixture = async name => JSON.parse(await readFile(new URL("./fixtures/marketplaces/" + name, import.meta.url), "utf8"));
 const ok = data => ({ ok: true, status: 200, json: async () => data });
