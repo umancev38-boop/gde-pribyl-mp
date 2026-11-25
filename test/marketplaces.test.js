@@ -82,3 +82,26 @@ test("Ozon pagination rejects a repeated product cursor instead of saving partia
     /повторяющийся курсор/
   );
 });
+
+test("Ozon rejects malformed successful JSON instead of treating it as an empty catalogue", async () => {
+  let calls = 0;
+  await assert.rejects(
+    fetchMarketplaceSnapshot("ozon", { clientId: "123", apiKey: "x".repeat(24) }, async () => {
+      calls += 1;
+      return { ok: true, status: 200, json: async () => { throw new SyntaxError("invalid JSON"); } };
+    }),
+    /некорректный ответ/
+  );
+  assert.equal(calls, 1);
+});
+
+test("marketplace API rejects null and primitive JSON payloads on successful responses", async () => {
+  for (const payload of [null, "unexpected text", 42, true]) {
+    await assert.rejects(
+      fetchMarketplaceSnapshot("ozon", { clientId: "123", apiKey: "x".repeat(24) }, async () => ({
+        ok: true, status: 200, json: async () => payload
+      })),
+      /некорректный ответ/
+    );
+  }
+});
