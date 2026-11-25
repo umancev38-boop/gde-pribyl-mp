@@ -2,6 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import pg from "pg";
 import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "./lib/entitlements.js";
+import { MarketplaceApiError, parseEncryptionKey, encryptCredentials, decryptCredentials, normalizeMarketplaceCredentials, fetchMarketplaceSnapshot } from "./lib/marketplaces.js";
 
 const { Pool } = pg;
 const app = express();
@@ -152,6 +153,18 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS user_history_user_idx ON user_history(user_id);
+    CREATE TABLE IF NOT EXISTS marketplace_integrations (
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      marketplace TEXT NOT NULL CHECK (marketplace IN ('wildberries','ozon')),
+      encrypted_credentials TEXT NOT NULL,
+      nonce TEXT NOT NULL,
+      auth_tag TEXT NOT NULL,
+      snapshot JSONB,
+      last_synced_at TIMESTAMPTZ,
+      last_error TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, marketplace)
+    );
     CREATE TABLE IF NOT EXISTS payments (
       id BIGSERIAL PRIMARY KEY,
       plan_code TEXT NOT NULL,
@@ -315,6 +328,120 @@ app.put("/api/account/data",requireUser,sameOrigin,async(req,res)=>{
   }
 });
 
+
+const MARKETPLACE_NAMES = Object.freeze({ wildberries: "Wildberries", ozon: "Ozon" });
+function requirePaidMarketplacePlan(req, res, next) {
+  accountPlan(req.user.id).then(plan => {
+    if (plan.plan !== "pro" && plan.plan !== "business") {
+      return res.status(403).json({ error: "Подключение маркетплейсов доступно в PRO и BUSINESS.", plan: plan.plan });
+    }
+    next();
+  }).catch(error => {
+    console.error("Marketplace plan lookup failed:", error.message);
+    res.status(500).json({ error: "Не удалось проверить тариф аккаунта." });
+  });
+}
+function marketplaceParam(req, res, next) {
+  if (!Object.hasOwn(MARKETPLACE_NAMES, req.params.marketplace)) {
+    return res.status(404).json({ error: "Неизвестный маркетплейс." });
+  }
+  next();
+}
+function marketplaceError(res, error) {
+  if (error instanceof MarketplaceApiError) return res.status(error.status).json({ error: error.message });
+  if (error?.message?.includes("MARKETPLACE_ENCRYPTION_KEY")) {
+    return res.status(503).json({ error: "Защищённое хранилище ключей ещё не настроено на сервере." });
+  }
+  console.error("Marketplace integration failed:", error?.message || "unknown error");
+  return res.status(502).json({ error: "Не удалось выполнить запрос к маркетплейсу. Проверь подключение и повтори позже." });
+}
+async function loadMarketplaceCredentials(userId, marketplace) {
+  const found = await pool.query(
+    "SELECT encrypted_credentials, nonce, auth_tag FROM marketplace_integrations WHERE user_id=$1 AND marketplace=$2",
+    [userId, marketplace]
+  );
+  if (!found.rowCount) return null;
+  const row = found.rows[0];
+  return decryptCredentials({ ciphertext: row.encrypted_credentials, nonce: row.nonce, authTag: row.auth_tag }, parseEncryptionKey());
+}
+async function syncMarketplace(userId, marketplace, credentials) {
+  const snapshot = await fetchMarketplaceSnapshot(marketplace, credentials);
+  await pool.query(
+    "UPDATE marketplace_integrations SET snapshot=$3::jsonb,last_synced_at=NOW(),last_error=NULL,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2",
+    [userId, marketplace, JSON.stringify(snapshot)]
+  );
+  return snapshot;
+}
+
+app.get("/api/marketplaces", requireUser, requirePaidMarketplacePlan, async (req, res) => {
+  try {
+    const found = await pool.query(
+      "SELECT marketplace,last_synced_at,last_error,snapshot,updated_at FROM marketplace_integrations WHERE user_id=$1 ORDER BY marketplace",
+      [req.user.id]
+    );
+    const connections = Object.fromEntries(found.rows.map(row => [row.marketplace, {
+      connected: true,
+      lastSyncedAt: row.last_synced_at,
+      lastError: row.last_error,
+      updatedAt: row.updated_at,
+      snapshot: row.snapshot
+    }]));
+    res.setHeader("Cache-Control", "no-store, private");
+    res.json({ connections });
+  } catch (error) {
+    console.error("Marketplace connections read failed:", error.message);
+    res.status(500).json({ error: "Не удалось получить состояние подключений." });
+  }
+});
+
+app.put("/api/marketplaces/:marketplace/credentials", rateLimit({ max: 5 }), requireUser, sameOrigin, requirePaidMarketplacePlan, marketplaceParam, async (req, res) => {
+  const marketplace = req.params.marketplace;
+  try {
+    const key = parseEncryptionKey();
+    const credentials = normalizeMarketplaceCredentials(marketplace, req.body);
+    const snapshot = await fetchMarketplaceSnapshot(marketplace, credentials);
+    const encrypted = encryptCredentials(credentials, key);
+    await pool.query(
+      `INSERT INTO marketplace_integrations(user_id,marketplace,encrypted_credentials,nonce,auth_tag,snapshot,last_synced_at,last_error,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6::jsonb,NOW(),NULL,NOW())
+       ON CONFLICT(user_id,marketplace) DO UPDATE SET
+         encrypted_credentials=EXCLUDED.encrypted_credentials,nonce=EXCLUDED.nonce,auth_tag=EXCLUDED.auth_tag,
+         snapshot=EXCLUDED.snapshot,last_synced_at=NOW(),last_error=NULL,updated_at=NOW()`,
+      [req.user.id, marketplace, encrypted.ciphertext, encrypted.nonce, encrypted.authTag, JSON.stringify(snapshot)]
+    );
+    res.setHeader("Cache-Control", "no-store, private");
+    res.json({ connected: true, marketplace, snapshot });
+  } catch (error) {
+    return marketplaceError(res, error);
+  }
+});
+
+app.post("/api/marketplaces/:marketplace/refresh", rateLimit({ max: 5 }), requireUser, sameOrigin, requirePaidMarketplacePlan, marketplaceParam, async (req, res) => {
+  const marketplace = req.params.marketplace;
+  try {
+    const credentials = await loadMarketplaceCredentials(req.user.id, marketplace);
+    if (!credentials) return res.status(404).json({ error: "Этот маркетплейс ещё не подключён." });
+    const snapshot = await syncMarketplace(req.user.id, marketplace, credentials);
+    res.setHeader("Cache-Control", "no-store, private");
+    res.json({ connected: true, marketplace, snapshot });
+  } catch (error) {
+    if (error instanceof MarketplaceApiError) {
+      await pool.query("UPDATE marketplace_integrations SET last_error=$3,updated_at=NOW() WHERE user_id=$1 AND marketplace=$2", [req.user.id, marketplace, error.message]).catch(() => {});
+    }
+    return marketplaceError(res, error);
+  }
+});
+
+app.delete("/api/marketplaces/:marketplace", rateLimit({ max: 5 }), requireUser, sameOrigin, requirePaidMarketplacePlan, marketplaceParam, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM marketplace_integrations WHERE user_id=$1 AND marketplace=$2", [req.user.id, req.params.marketplace]);
+    res.json({ disconnected: true, marketplace: req.params.marketplace });
+  } catch (error) {
+    console.error("Marketplace disconnect failed:", error.message);
+    res.status(500).json({ error: "Не удалось отключить маркетплейс." });
+  }
+});
+
 app.get("/health", async (_req, res) => {
   let databaseHealthy=false;
   if(pool) { try { await pool.query("SELECT 1"); databaseHealthy=true; } catch(error) { console.error("Health database check failed:",error.message); } }
@@ -322,7 +449,7 @@ app.get("/health", async (_req, res) => {
   res.setHeader("Cache-Control","no-store");
   res.status(healthy?200:503).json({
     ok: healthy, version: "1.0.0", accountsConfigured: Boolean(pool), serverSideQuotas: true,
-    paymentsConfigured: configReady(), databaseConfigured: Boolean(pool), databaseHealthy,
+    paymentsConfigured: configReady(), databaseConfigured: Boolean(pool), databaseHealthy, marketplaceEncryptionConfigured: Boolean(process.env.MARKETPLACE_ENCRYPTION_KEY),
     merchantConfigured: Boolean(MERCHANT_LOGIN), passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
     plansConfigured: Object.keys(plans).length > 0, testMode: TEST_MODE, entitlements: PLAN_ENTITLEMENTS,
     planSummary: Object.fromEntries(Object.entries(plans).map(([code, plan]) => [code, { amount: Number(plan.amount), days: Number(plan.days), label: String(plan.label || code) }]))
