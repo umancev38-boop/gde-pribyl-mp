@@ -211,8 +211,8 @@ function stableRecordSerialize(value) {
   if (value && typeof value === "object") return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + stableRecordSerialize(value[key])).join(",") + "}";
   return JSON.stringify(value);
 }
-function legacyRecordId(value) {
-  const input=stableRecordSerialize(value);
+function legacyRecordId(value, namespace) {
+  const input=namespace+":"+stableRecordSerialize(value);
   let hash=0xcbf29ce484222325n;
   for(let i=0;i<input.length;i++){hash^=BigInt(input.charCodeAt(i));hash=BigInt.asUintN(64,hash*0x100000001b3n);}
   return "legacy:"+hash.toString(16).padStart(16,"0");
@@ -324,7 +324,7 @@ app.get("/api/account/data",requireUser,async(req,res)=>{
       const result=[];
       for(const row of rows){
         let data=row.data;
-        if(!data.id){data={...data,id:legacyRecordId(data)};await pool.query("UPDATE "+table+" SET data=$1::jsonb WHERE user_id=$2 AND ctid=$3::tid",[JSON.stringify(data),req.user.id,row.row_id]);}
+        if(!data.id){data={...data,id:legacyRecordId(data,table==="user_products"?"products":"history")};await pool.query("UPDATE "+table+" SET data=$1::jsonb WHERE user_id=$2 AND ctid=$3::tid",[JSON.stringify(data),req.user.id,row.row_id]);}
         result.push(data);
       }
       return result;
