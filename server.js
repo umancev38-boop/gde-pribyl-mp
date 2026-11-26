@@ -1,11 +1,14 @@
 import express from "express";
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "./lib/entitlements.js";
 import { MarketplaceApiError, parseEncryptionKey, encryptCredentials, decryptCredentials, normalizeMarketplaceCredentials, fetchMarketplaceSnapshot } from "./lib/marketplaces.js";
 
 const { Pool } = pg;
 const app = express();
+const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(express.json({ limit: "2mb" }));
@@ -526,6 +529,9 @@ app.delete("/api/marketplaces/:marketplace", rateLimit({ max: 5 }), requireUser,
     res.status(500).json({ error: "Не удалось отключить маркетплейс." });
   }
 });
+
+app.get("/", (_req, res) => res.sendFile(path.join(ROOT_DIR, "index.html")));
+app.get("/legal.html", (_req, res) => res.sendFile(path.join(ROOT_DIR, "legal.html")));
 
 app.get("/health", async (_req, res) => {
   let databaseHealthy=false;
