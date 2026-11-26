@@ -240,13 +240,13 @@ function cookieValue(req,name) {
   try { return decodeURIComponent(item.slice(name.length+1)); } catch { return ""; }
 }
 function sessionCookie(res,token) {
-  res.cookie(SESSION_COOKIE,token,{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:SESSION_DAYS*86400000});
+  res.cookie(SESSION_COOKIE,token,{httpOnly:true,secure:true,sameSite:"none",path:"/",maxAge:SESSION_DAYS*86400000});
 }
 function clearSession(res) {
-  res.clearCookie(SESSION_COOKIE,{httpOnly:true,secure:true,sameSite:"lax",path:"/"});
+  res.clearCookie(SESSION_COOKIE,{httpOnly:true,secure:true,sameSite:"none",path:"/"});
 }
 function sameOrigin(req,res,next) {
-  if(req.headers.origin!==FRONTEND_ORIGIN) return res.status(403).json({error:"Запрос отклонён: неверный источник."});
+  if(!FRONTEND_ORIGINS.has(req.headers.origin)) return res.status(403).json({error:"Запрос отклонён: неверный источник."});
   next();
 }
 function derivePassword(password,salt) {
