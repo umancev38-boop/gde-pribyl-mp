@@ -75,9 +75,6 @@ function rateLimit({ windowMs = RATE_LIMIT_WINDOW_MS, max = RATE_LIMIT_MAX } = {
 
 const PORT = Number(process.env.PORT || 3000);
 const SITE_URL = process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
-const API_PUBLIC_URL = process.env.API_PUBLIC_URL || "https://gde-pribyl-mp-api.onrender.com";
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const EMAIL_FROM = process.env.EMAIL_FROM || "";
 const SMSC_API_KEY = process.env.SMSC_API_KEY || "";
 const SMSC_SENDER = process.env.SMSC_SENDER || "";
 const MERCHANT_LOGIN = process.env.ROBOKASSA_MERCHANT_LOGIN || "";
@@ -169,14 +166,6 @@ async function initDb() {
     ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique_idx ON users(phone) WHERE phone IS NOT NULL;
     CREATE TABLE IF NOT EXISTS phone_auth_codes (phone TEXT PRIMARY KEY, code_hash TEXT NOT NULL, code_salt TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS auth_tokens (
-      token_hash TEXT PRIMARY KEY,
-      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      purpose TEXT NOT NULL CHECK (purpose IN ('verify_email','password_reset')),
-      expires_at TIMESTAMPTZ NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS auth_tokens_user_purpose_idx ON auth_tokens(user_id,purpose);
     CREATE TABLE IF NOT EXISTS user_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -292,32 +281,6 @@ async function createUserSession(userId, db = pool) {
   await db.query("INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[hashToken(token),userId]);
   return token;
 }
-async function createAuthToken(userId,purpose,expiresInHours) {
-  const token=crypto.randomBytes(32).toString("base64url");
-  await pool.query("DELETE FROM auth_tokens WHERE user_id=$1 AND purpose=$2",[userId,purpose]);
-  await pool.query("INSERT INTO auth_tokens(token_hash,user_id,purpose,expires_at) VALUES($1,$2,$3,NOW()+($4::int * INTERVAL '1 hour'))",
-    [hashToken(token),userId,purpose,expiresInHours]);
-  return token;
-}
-async function sendAccountEmail(to,subject,html) {
-  if(!RESEND_API_KEY||!EMAIL_FROM) throw new Error("Email delivery is not configured");
-  const response=await fetch("https://api.resend.com/emails",{
-    method:"POST",
-    headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json"},
-    body:JSON.stringify({from:EMAIL_FROM,to:[to],subject,html})
-  });
-  if(!response.ok) {
-    const detail=await response.text().catch(()=>"");
-    console.error("Email provider rejected message:",response.status,detail.slice(0,500));
-    throw new Error("Email provider request failed");
-  }
-}
-async function sendVerificationEmail(userId,email) {
-  const token=await createAuthToken(userId,"verify_email",24);
-  const url=API_PUBLIC_URL+"/api/auth/verify-email?token="+encodeURIComponent(token);
-  await sendAccountEmail(email,"Подтверждение e-mail для Где прибыль",
-    '<p>Подтверди адрес электронной почты для аккаунта «Где прибыль».</p><p><a href="'+url+'">Подтвердить e-mail</a></p><p>Ссылка действует 24 часа. Если ты не создавал аккаунт, просто проигнорируй письмо.</p>');
-}
 function normalizePhone(value) {
   const raw=String(value||"").trim();
   if(!/^\+?[0-9 ()-]+$/.test(raw)) return "";
@@ -421,118 +384,6 @@ app.post("/api/auth/sms/verify",rateLimit({max:8,windowMs:600000}),sameOrigin,as
     console.error("SMS verification failed:",error.message);
     return res.status(500).json({error:"Не удалось подтвердить номер. Попробуй ещё раз."});
   } finally { client.release(); }
-});
-app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
-  if(!pool) return res.status(503).json({error:"Регистрация временно недоступна."});
-  const email=String(req.body?.email||"").trim().toLowerCase();
-  const password=String(req.body?.password||"");
-  if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:"Укажи корректный e-mail."});
-  if(password.length<10||password.length>128) return res.status(400).json({error:"Пароль должен содержать от 10 до 128 символов."});
-  const client=await pool.connect();
-  let userId=null;
-  try {
-    const salt=crypto.randomBytes(16).toString("hex");
-    const passwordHash=await derivePassword(password,salt);
-    await client.query("BEGIN");
-    const created=await client.query("INSERT INTO users(email,password_salt,password_hash,email_verified) VALUES($1,$2,$3,FALSE) ON CONFLICT(email) DO NOTHING RETURNING id,email",[email,salt,passwordHash]);
-    if(!created.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({error:"Аккаунт с таким e-mail уже существует."}); }
-    userId=created.rows[0].id;
-    await client.query("COMMIT");
-    await sendVerificationEmail(userId,email);
-    return res.status(201).json({verificationRequired:true,message:"Аккаунт создан. Проверь почту и перейди по ссылке из письма для подтверждения e-mail."});
-  } catch(error) {
-    await client.query("ROLLBACK").catch(()=>{});
-    if(userId) await pool.query("DELETE FROM users WHERE id=$1 AND email_verified=FALSE",[userId]).catch(()=>{});
-    console.error("Registration failed:",error.message);
-    res.status(503).json({error:RESEND_API_KEY&&EMAIL_FROM?"Не удалось отправить письмо. Повтори регистрацию позже.":"Отправка писем ещё не настроена на сервере. Регистрация временно недоступна."});
-  } finally { client.release(); }
-});
-app.post("/api/auth/login",rateLimit({max:10}),sameOrigin,async(req,res)=>{
-  if(!pool) return res.status(503).json({error:"Вход временно недоступен."});
-  const email=String(req.body?.email||"").trim().toLowerCase();
-  const password=String(req.body?.password||"");
-  if(email.length>254||password.length>128) return res.status(400).json({error:"Проверь e-mail и пароль."});
-  try {
-    const found=await pool.query("SELECT id,email,password_salt,password_hash,email_verified FROM users WHERE email=$1",[email]);
-    if(!found.rowCount) return res.status(401).json({error:"Неверный e-mail или пароль."});
-    const user=found.rows[0],candidate=await derivePassword(password,user.password_salt);
-    if(!safeEqual(candidate,user.password_hash)) return res.status(401).json({error:"Неверный e-mail или пароль."});
-    if(!user.email_verified) return res.status(403).json({error:"Сначала подтверди e-mail. Проверь почту или запроси новое письмо."});
-    const token=await createUserSession(user.id);
-    sessionCookie(res,token);
-    return res.json({user:{id:user.id,email:user.email},...await accountPlan(user.id)});
-  } catch(error) {
-    console.error("Login failed:",error.message);
-    res.status(500).json({error:"Не удалось выполнить вход."});
-  }
-});
-app.post("/api/auth/resend-verification",rateLimit({max:3}),sameOrigin,async(req,res)=>{
-  const email=String(req.body?.email||"").trim().toLowerCase();
-  if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:"Укажи корректный e-mail."});
-  try {
-    const found=await pool.query("SELECT id,email,email_verified FROM users WHERE email=$1",[email]);
-    if(found.rowCount&&!found.rows[0].email_verified) await sendVerificationEmail(found.rows[0].id,email);
-    return res.json({ok:true,message:"Если аккаунт существует и ещё не подтверждён, письмо отправлено."});
-  } catch(error) {
-    console.error("Verification resend failed:",error.message);
-    res.status(503).json({error:"Не удалось отправить письмо. Проверь настройки почты сервера."});
-  }
-});
-app.get("/api/auth/verify-email",rateLimit({max:20}),async(req,res)=>{
-  const token=String(req.query?.token||"");
-  if(!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return res.redirect(SITE_URL+"/?verified=invalid");
-  try {
-    const result=await pool.query("UPDATE users SET email_verified=TRUE WHERE id=(SELECT user_id FROM auth_tokens WHERE token_hash=$1 AND purpose='verify_email' AND expires_at>NOW()) RETURNING id",
-      [hashToken(token)]);
-    await pool.query("DELETE FROM auth_tokens WHERE token_hash=$1",[hashToken(token)]);
-    return res.redirect(SITE_URL+(result.rowCount?"/?verified=1":"/?verified=expired"));
-  } catch(error) {
-    console.error("Email verification failed:",error.message);
-    return res.redirect(SITE_URL+"/?verified=error");
-  }
-});
-app.post("/api/auth/forgot-password",rateLimit({max:3}),sameOrigin,async(req,res)=>{
-  const email=String(req.body?.email||"").trim().toLowerCase();
-  if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:"Укажи корректный e-mail."});
-  try {
-    const found=await pool.query("SELECT id,email FROM users WHERE email=$1 AND email_verified=TRUE",[email]);
-    if(found.rowCount) {
-      const token=await createAuthToken(found.rows[0].id,"password_reset",1);
-      const url=SITE_URL+"/?reset="+encodeURIComponent(token);
-      await sendAccountEmail(email,"Сброс пароля для Где прибыль",
-        '<p>Получен запрос на смену пароля аккаунта «Где прибыль».</p><p><a href="'+url+'">Задать новый пароль</a></p><p>Ссылка действует 1 час. Если ты не запрашивал смену пароля, проигнорируй письмо.</p>');
-    }
-    return res.json({ok:true,message:"Если подтверждённый аккаунт с таким адресом существует, письмо для сброса пароля отправлено."});
-  } catch(error) {
-    console.error("Password reset request failed:",error.message);
-    res.status(503).json({error:"Не удалось отправить письмо. Проверь настройки почты сервера."});
-  }
-});
-app.post("/api/auth/reset-password",rateLimit({max:5}),sameOrigin,async(req,res)=>{
-  const token=String(req.body?.token||"");
-  const password=String(req.body?.password||"");
-  if(!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return res.status(400).json({error:"Ссылка недействительна или устарела."});
-  if(password.length<10||password.length>128) return res.status(400).json({error:"Пароль должен содержать от 10 до 128 символов."});
-  try {
-    const salt=crypto.randomBytes(16).toString("hex");
-    const passwordHash=await derivePassword(password,salt);
-    const client=await pool.connect();
-    try {
-      await client.query("BEGIN");
-      const changed=await client.query("UPDATE users SET password_salt=$1,password_hash=$2 WHERE id=(SELECT user_id FROM auth_tokens WHERE token_hash=$3 AND purpose='password_reset' AND expires_at>NOW()) RETURNING id",
-        [salt,passwordHash,hashToken(token)]);
-      if(!changed.rowCount) { await client.query("ROLLBACK"); return res.status(400).json({error:"Ссылка недействительна или срок её действия истёк. Запроси новое письмо."}); }
-      await client.query("DELETE FROM user_sessions WHERE user_id=$1",[changed.rows[0].id]);
-      await client.query("DELETE FROM auth_tokens WHERE user_id=$1",[changed.rows[0].id]);
-      await client.query("COMMIT");
-      clearSession(res);
-      return res.json({ok:true,message:"Пароль изменён. Теперь войди с новым паролем."});
-    } catch(error) { await client.query("ROLLBACK").catch(()=>{}); throw error; }
-    finally { client.release(); }
-  } catch(error) {
-    console.error("Password reset failed:",error.message);
-    res.status(500).json({error:"Не удалось изменить пароль."});
-  }
 });
 app.get("/api/auth/me",requireUser,async(req,res)=>{
   res.setHeader("Cache-Control","no-store, private");
@@ -934,7 +785,6 @@ app.listen(PORT, async () => {
       plansConfigured: Object.keys(plans).length > 0,
       planCodes: Object.keys(plans),
       testMode: TEST_MODE,
-      emailConfigured: Boolean(RESEND_API_KEY && EMAIL_FROM),
       hashAlgorithm: HASH_ALGORITHM
     }));
   } catch (error) {
