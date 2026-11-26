@@ -189,23 +189,30 @@ button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlig
 <h2 id="accountTitle">Аккаунт и облачная синхронизация</h2>
 <p class="recordsIntro">Создай аккаунт или войди, чтобы хранить товары и историю в облаке и пользоваться подпиской на разных устройствах.</p>
 <div class="accountGrid">
-<div class="field"><label for="accountEmail">E-mail</label><input id="accountEmail" type="email" autocomplete="email" placeholder="name@example.com"></div>
-<div class="field"><label for="accountPassword">Пароль (от 10 символов)</label><input id="accountPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" placeholder="Не менее 10 символов"></div>
+ <div class="field"><label for="accountPhone">Номер телефона</label><input id="accountPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+79991234567"></div>
+ <div class="field"><label for="accountPassword">Пароль (от 10 символов)</label><input id="accountPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" placeholder="Не менее 10 символов"></div>
 </div>
 <div class="accountActions">
-<button id="registerAccount" type="button">Создать аккаунт</button>
-<button id="loginAccount" type="button" class="secondary">Войти</button>
-<button id="logoutAccount" type="button" class="secondary" hidden>Выйти</button>
-<button id="syncAccount" type="button" class="secondary" hidden>Синхронизировать данные</button>
+ <button id="registerAccount" type="button">Получить SMS-код и зарегистрироваться</button>
+ <button id="loginAccount" type="button" class="secondary">Войти по телефону</button>
+ <button id="logoutAccount" type="button" class="secondary" hidden>Выйти</button>
+ <button id="syncAccount" type="button" class="secondary" hidden>Синхронизировать данные</button>
 </div>
-<div class="accountActions">
-<button id="resendVerification" type="button" class="secondary">Выслать письмо повторно</button>
-<button id="forgotPassword" type="button" class="secondary">Забыли пароль?</button>
+<div class="accountGrid" id="phoneVerificationPanel" hidden>
+ <div class="field"><label for="phoneVerificationCode">Код из SMS</label><input id="phoneVerificationCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Код подтверждения"></div>
+ <button id="verifyPhoneRegistration" type="button">Подтвердить номер и создать аккаунт</button>
 </div>
+<div class="accountActions"><button id="forgotPassword" type="button" class="secondary">Забыли пароль? Восстановить по SMS</button></div>
 <div id="resetPasswordPanel" class="accountGrid" hidden>
-<div class="field"><label for="newAccountPassword">Новый пароль (от 10 символов)</label><input id="newAccountPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" placeholder="Не менее 10 символов"></div>
-<button id="saveNewPassword" type="button">Сохранить новый пароль</button>
+ <div class="field"><label for="phoneResetCode">Код из SMS</label><input id="phoneResetCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Код подтверждения"></div>
+ <div class="field"><label for="newAccountPassword">Новый пароль (от 10 символов)</label><input id="newAccountPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" placeholder="Не менее 10 символов"></div>
+ <button id="saveNewPassword" type="button">Сохранить новый пароль</button>
 </div>
+<details class="hint"><summary>Вход для существующих аккаунтов по e-mail</summary>
+ <div class="field"><label for="accountEmail">E-mail существующего аккаунта</label><input id="accountEmail" type="email" autocomplete="email" placeholder="name@example.com"></div>
+ <button id="legacyEmailLogin" type="button" class="secondary">Войти по e-mail</button>
+ <button id="resendVerification" type="button" class="secondary">Повторить письмо подтверждения</button>
+</details>
 <p id="accountMeta" class="accountMeta">Не выполнен вход. Локальные данные остаются на этом устройстве.</p>
 <div id="accountStatus" class="accountStatus" role="status" aria-live="polite"></div>
 </section>
@@ -630,9 +637,9 @@ function updateAuthUI(){
  el('registerAccount').hidden=signedIn;el('loginAccount').hidden=signedIn;
  el('logoutAccount').hidden=!signedIn;el('syncAccount').hidden=!signedIn;
  el('resendVerification').hidden=signedIn;el('forgotPassword').hidden=signedIn;
- el('accountEmail').disabled=signedIn;el('accountPassword').disabled=signedIn;
+ el('accountEmail').disabled=signedIn;el('accountPhone').disabled=signedIn;el('accountPassword').disabled=signedIn;
  el('accountMeta').textContent=signedIn
-  ?'Выполнен вход: '+accountUser.email+'. Тариф: '+currentPlan.toUpperCase()+(accountExpiry?' · действует до '+new Date(accountExpiry).toLocaleDateString('ru-RU'):'')
+  ?'Выполнен вход: '+(accountUser.phone||accountUser.email)+'. Тариф: '+currentPlan.toUpperCase()+(accountExpiry?' · действует до '+new Date(accountExpiry).toLocaleDateString('ru-RU'):'')
   :'Не выполнен вход. Локальные данные остаются на этом устройстве.';
  document.querySelectorAll('[data-pay-plan]').forEach(button=>{button.disabled=!signedIn||!paymentsReady;button.title=!signedIn?'Сначала войди в аккаунт.':!paymentsReady?paymentConfigMessage:'Оформить подписку'});
  paymentStatus.textContent=!paymentsReady?paymentConfigMessage:!signedIn?'Войди в аккаунт, чтобы оформить подписку.':(subscriptionMessage||'Можно оформить подписку.');
@@ -672,59 +679,57 @@ async function refreshSubscription(){
  updateAuthUI();updatePlanUI();loadMarketplaceConnections();
 }
 async function authenticate(mode){
- const email=el('accountEmail').value.trim(),password=el('accountPassword').value;
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAccountStatus('Укажи корректный e-mail.',true);
+ const phone=el('accountPhone').value.trim(),password=el('accountPassword').value;
+ if(!/^\\+[1-9]\\d{7,14}$/.test(phone.replace(/[\\s().-]/g,'')))return setAccountStatus('Укажи телефон в международном формате, например +79991234567.',true);
  if(password.length<10||password.length>128)return setAccountStatus('Пароль должен содержать от 10 до 128 символов.',true);
  const buttons=['registerAccount','loginAccount'];buttons.forEach(id=>el(id).disabled=true);
  try{
-  const data=await apiRequest('/api/auth/'+mode,{method:'POST',body:JSON.stringify({email,password})});
-  el('accountPassword').value='';
-  if(data.verificationRequired){
-   setAccountStatus(data.message||'Аккаунт создан. Проверь почту и подтверди адрес.');
-   return;
-  }
-  accountUser=data.user;currentPlan=data.plan||'free';accountLimits=data.limits||PLAN_LIMITS[currentPlan]||PLAN_LIMITS.free;accountExpiry=data.expiresAt||null;
-  setAccountStatus('Вход выполнен. Можно синхронизировать данные.');
-  await refreshSubscription();
+  const data=await apiRequest('/api/auth/phone/'+(mode==='register'?'register':'login'),{method:'POST',body:JSON.stringify({phone,password})});
+  if(data.verificationRequired){el('phoneVerificationPanel').hidden=false;setAccountStatus(data.message||'SMS-код отправлен. Введи его для завершения регистрации.');return;}
+  el('accountPassword').value='';accountUser=data.user;currentPlan=data.plan||'free';accountLimits=data.limits||PLAN_LIMITS[currentPlan]||PLAN_LIMITS.free;accountExpiry=data.expiresAt||null;
+  setAccountStatus('Вход выполнен. Можно синхронизировать данные.');await refreshSubscription();
  }catch(error){setAccountStatus(error.message,true)}
  finally{buttons.forEach(id=>el(id).disabled=false)}
 }
 el('registerAccount').addEventListener('click',()=>authenticate('register'));
 el('loginAccount').addEventListener('click',()=>authenticate('login'));
+el('verifyPhoneRegistration').addEventListener('click',async()=>{
+ const phone=el('accountPhone').value.trim(),code=el('phoneVerificationCode').value.trim(),button=el('verifyPhoneRegistration');
+ if(!code)return setAccountStatus('Введи код из SMS.',true);
+ button.disabled=true;
+ try{const data=await apiRequest('/api/auth/phone/verify-registration',{method:'POST',body:JSON.stringify({phone,code})});
+  accountUser=data.user;currentPlan=data.plan||'free';accountLimits=data.limits||PLAN_LIMITS[currentPlan]||PLAN_LIMITS.free;accountExpiry=data.expiresAt||null;
+  el('accountPassword').value='';el('phoneVerificationPanel').hidden=true;setAccountStatus('Номер подтверждён. Аккаунт создан.');await refreshSubscription();
+ }catch(error){setAccountStatus(error.message,true)}finally{button.disabled=false}
+});
+el('legacyEmailLogin').addEventListener('click',async()=>{
+ const email=el('accountEmail').value.trim(),password=el('accountPassword').value;
+ if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return setAccountStatus('Укажи корректный e-mail старого аккаунта.',true);
+ try{const data=await apiRequest('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
+  accountUser=data.user;currentPlan=data.plan||'free';accountLimits=data.limits||PLAN_LIMITS[currentPlan]||PLAN_LIMITS.free;accountExpiry=data.expiresAt||null;setAccountStatus('Вход выполнен.');await refreshSubscription();
+ }catch(error){setAccountStatus(error.message,true)}
+});
 el('resendVerification').addEventListener('click',async()=>{
  const email=el('accountEmail').value.trim();
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAccountStatus('Сначала укажи e-mail аккаунта.',true);
- const button=el('resendVerification');button.disabled=true;
+ if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return setAccountStatus('Укажи e-mail старого аккаунта.',true);
  try{const data=await apiRequest('/api/auth/resend-verification',{method:'POST',body:JSON.stringify({email})});setAccountStatus(data.message)}
  catch(error){setAccountStatus(error.message,true)}
- finally{button.disabled=false}
 });
 el('forgotPassword').addEventListener('click',async()=>{
- const email=el('accountEmail').value.trim();
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAccountStatus('Укажи e-mail, на который отправить ссылку для сброса пароля.',true);
+ const phone=el('accountPhone').value.trim();
+ if(!/^\\+[1-9]\\d{7,14}$/.test(phone.replace(/[\\s().-]/g,'')))return setAccountStatus('Сначала укажи телефон в международном формате.',true);
  const button=el('forgotPassword');button.disabled=true;
- try{const data=await apiRequest('/api/auth/forgot-password',{method:'POST',body:JSON.stringify({email})});setAccountStatus(data.message)}
- catch(error){setAccountStatus(error.message,true)}
- finally{button.disabled=false}
+ try{const data=await apiRequest('/api/auth/phone/forgot-password',{method:'POST',body:JSON.stringify({phone})});el('resetPasswordPanel').hidden=false;setAccountStatus(data.message)}
+ catch(error){setAccountStatus(error.message,true)}finally{button.disabled=false}
 });
 el('saveNewPassword').addEventListener('click',async()=>{
- const token=new URLSearchParams(location.search).get('reset')||'';
- const password=el('newAccountPassword').value;
+ const phone=el('accountPhone').value.trim(),code=el('phoneResetCode').value.trim(),password=el('newAccountPassword').value;
  if(password.length<10||password.length>128)return setAccountStatus('Новый пароль должен содержать от 10 до 128 символов.',true);
  const button=el('saveNewPassword');button.disabled=true;
- try{
-  const data=await apiRequest('/api/auth/reset-password',{method:'POST',body:JSON.stringify({token,password})});
-  el('newAccountPassword').value='';el('resetPasswordPanel').hidden=true;
-  history.replaceState(null,'',location.pathname);
-  setAccountStatus(data.message);
- }catch(error){setAccountStatus(error.message,true)}
- finally{button.disabled=false}
+ try{const data=await apiRequest('/api/auth/phone/reset-password',{method:'POST',body:JSON.stringify({phone,code,password})});
+  el('newAccountPassword').value='';el('phoneResetCode').value='';el('resetPasswordPanel').hidden=true;setAccountStatus(data.message);
+ }catch(error){setAccountStatus(error.message,true)}finally{button.disabled=false}
 });
-const authQuery=new URLSearchParams(location.search);
-if(authQuery.has('reset')){el('resetPasswordPanel').hidden=false;setAccountStatus('Введи новый пароль. Ссылка действует один час.');}
-if(authQuery.get('verified')==='1')setAccountStatus('E-mail подтверждён. Теперь можно войти.');
-else if(authQuery.get('verified')==='expired')setAccountStatus('Ссылка подтверждения недействительна или устарела. Запроси новое письмо.',true);
-else if(authQuery.get('verified')==='invalid'||authQuery.get('verified')==='error')setAccountStatus('Не удалось подтвердить e-mail. Запроси новое письмо.',true);
 el('logoutAccount').addEventListener('click',async()=>{
  el('logoutAccount').disabled=true;
  try{await apiRequest('/api/auth/logout',{method:'POST',body:'{}'});accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;setStorageScope(null);renderRecords();loadMarketplaceConnections();updateAuthUI();updatePlanUI();setAccountStatus('Вы вышли из аккаунта. Локальные данные этого профиля сохранены отдельно.');paymentStatus.textContent='Для оформления подписки войди в аккаунт.'}
