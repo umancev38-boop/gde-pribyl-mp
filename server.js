@@ -13,7 +13,7 @@ app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(express.json({ limit: "2mb" }));
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://gde-pribyl-mp.onrender.com";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin === FRONTEND_ORIGIN) {
@@ -700,7 +700,7 @@ async function verifyDbRoundTrip() {
   } catch(error) { await client.query("ROLLBACK").catch(()=>{}); throw error; }
   finally { client.release(); }
 }
-app.listen(PORT, async () => {
+app.listen(PORT, "0.0.0.0", async () => {
   try {
     await initDb();
     await verifyDbRoundTrip();
