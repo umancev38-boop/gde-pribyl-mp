@@ -315,7 +315,7 @@ function normalizePhone(value) {
 }
 async function twilioVerify(action,phone,code) {
   if(!SMS_CONFIGURED) throw new Error("SMS provider is not configured");
-  const url="https://verify.twilio.com/v2/Services/"+encodeURIComponent(TWILIO_VERIFY_SERVICE_SID)+"/Verifications"+(action==="check"?"/Check":"");
+  const url="https://verify.twilio.com/v2/Services/"+encodeURIComponent(TWILIO_VERIFY_SERVICE_SID)+(action==="check"?"/VerificationCheck":"/Verifications");
   const body=new URLSearchParams(action==="check"?{To:phone,Code:code}:{To:phone,Channel:"sms"});
   const auth=Buffer.from(TWILIO_ACCOUNT_SID+":"+TWILIO_AUTH_TOKEN).toString("base64");
   const response=await fetch(url,{method:"POST",headers:{Authorization:"Basic "+auth,"Content-Type":"application/x-www-form-urlencoded"},body});
@@ -963,6 +963,7 @@ app.listen(PORT, async () => {
       planCodes: Object.keys(plans),
       testMode: TEST_MODE,
       emailConfigured: Boolean(RESEND_API_KEY && EMAIL_FROM),
+      smsConfigured: SMS_CONFIGURED,
       hashAlgorithm: HASH_ALGORITHM
     }));
   } catch (error) {
