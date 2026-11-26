@@ -533,17 +533,30 @@ app.delete("/api/marketplaces/:marketplace", rateLimit({ max: 5 }), requireUser,
 app.get("/", (_req, res) => res.sendFile(path.join(ROOT_DIR, "index.html")));
 app.get("/legal.html", (_req, res) => res.sendFile(path.join(ROOT_DIR, "legal.html")));
 
-app.get("/health", async (_req, res) => {
-  let databaseHealthy=false;
-  if(pool) { try { await pool.query("SELECT 1"); databaseHealthy=true; } catch(error) { console.error("Health database check failed:",error.message); } }
-  const healthy=Boolean(pool)&&databaseHealthy;
-  res.setHeader("Cache-Control","no-store");
-  res.status(healthy?200:503).json({
-    ok: healthy, version: "1.0.0", accountsConfigured: Boolean(pool), serverSideQuotas: true,
-    paymentsConfigured: configReady(), databaseConfigured: Boolean(pool), databaseHealthy, marketplaceEncryptionConfigured: Boolean(process.env.MARKETPLACE_ENCRYPTION_KEY),
-    merchantConfigured: Boolean(MERCHANT_LOGIN), passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
-    plansConfigured: Object.keys(plans).length > 0, testMode: TEST_MODE, entitlements: PLAN_ENTITLEMENTS,
-    planSummary: Object.fromEntries(Object.entries(plans).map(([code, plan]) => [code, { amount: Number(plan.amount), days: Number(plan.days), label: String(plan.label || code) }]))
+// Liveness: confirms that the HTTP process is running. Do not couple this
+// endpoint to PostgreSQL, otherwise a database migration outage kills the app.
+app.get("/health", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).json({ ok: true, version: "1.0.0", databaseConfigured: Boolean(pool) });
+});
+
+// Readiness: reports whether the app can serve database-backed requests.
+app.get("/ready", async (_req, res) => {
+  let databaseHealthy = false;
+  if (pool) {
+    try {
+      await pool.query("SELECT 1");
+      databaseHealthy = true;
+    } catch (error) {
+      console.error("Readiness database check failed:", error.message);
+    }
+  }
+  const ready = Boolean(pool) && databaseHealthy;
+  res.setHeader("Cache-Control", "no-store");
+  res.status(ready ? 200 : 503).json({
+    ok: ready,
+    databaseConfigured: Boolean(pool),
+    databaseHealthy
   });
 });
 
@@ -700,23 +713,37 @@ async function verifyDbRoundTrip() {
   } catch(error) { await client.query("ROLLBACK").catch(()=>{}); throw error; }
   finally { client.release(); }
 }
-app.listen(PORT, "0.0.0.0", async () => {
-  try {
-    await initDb();
-    await verifyDbRoundTrip();
-    console.log("PostgreSQL read/write smoke test passed (transaction rolled back)");
-    console.log(`Где прибыль МП API 1.0.0 listening on ${PORT}`);
-    console.log("Payment configuration:", JSON.stringify({
-      databaseConfigured: Boolean(pool),
-      merchantConfigured: Boolean(MERCHANT_LOGIN),
-      passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
-      plansConfigured: Object.keys(plans).length > 0,
-      planCodes: Object.keys(plans),
-      testMode: TEST_MODE,
-      hashAlgorithm: HASH_ALGORITHM
-    }));
-  } catch (error) {
-    console.error("Database initialization failed:", error.message);
-    process.exit(1);
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Где прибыль МП API 1.0.0 listening on ${PORT}`);
+  console.log("Runtime configuration:", JSON.stringify({
+    databaseConfigured: Boolean(pool),
+    merchantConfigured: Boolean(MERCHANT_LOGIN),
+    passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
+    plansConfigured: Object.keys(plans).length > 0,
+    planCodes: Object.keys(plans),
+    testMode: TEST_MODE,
+    hashAlgorithm: HASH_ALGORITHM
+  }));
+
+  // Keep the web process alive while the database is being provisioned.
+  // Database-backed routes remain protected and return 503 when no pool exists.
+  if (!pool) {
+    console.warn("DATABASE_URL is not configured; database-backed features are unavailable until it is set.");
+    return;
   }
+
+  void (async () => {
+    try {
+      await initDb();
+      await verifyDbRoundTrip();
+      console.log("PostgreSQL read/write smoke test passed (transaction rolled back)");
+    } catch (error) {
+      console.error("Database initialization failed; HTTP process remains available:", error.message);
+    }
+  })();
+});
+
+server.on("error", (error) => {
+  console.error("HTTP server failed:", error.message);
+  process.exitCode = 1;
 });
