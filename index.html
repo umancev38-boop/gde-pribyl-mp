@@ -114,10 +114,11 @@ button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlig
 <div class="metrics">
 <div class="metric"><span>Маржинальность</span><strong id="margin">23,2%</strong></div>
 <div class="metric"><span>Прибыль на объём</span><strong id="total">577,10 ₽</strong></div>
-<div class="metric"><span>Расходы на единицу</span><strong id="expenses">1 912,90 ₽</strong></div>
+<div class="metric"><span>Расходы всего</span><strong id="expenses">1 912,90 ₽</strong></div>
+<div class="metric"><span>Расходы на единицу</span><strong id="expensePerUnit">1 912,90 ₽</strong></div>
 <div class="metric"><span>Безубыточная цена</span><strong id="breakeven">1 759,49 ₽</strong></div>
 </div>
-<div class="breakdown"><h2 style="margin:20px 0 6px">Из чего складывается результат</h2>
+<div class="breakdown"><h2 style="margin:20px 0 6px">Расходы на одну единицу</h2>
 <div class="line"><span>Комиссия площадки</span><b id="feeValue">374 ₽</b></div>
 <div class="line"><span>Налог</span><b id="taxValue">149 ₽</b></div>
 <div class="line"><span>Закупка</span><b id="costValue">800 ₽</b></div>
@@ -300,15 +301,15 @@ function calc(){
  const p=raw.price,c=raw.cost,r=raw.commission/100,l=raw.logistics,a=raw.ads,o=raw.other,s=raw.storage,pack=raw.packaging,ret=raw.returns,t=raw.tax/100,q=raw.quantity;
  const numericIds=ids.filter(id=>id!=='market');
  const numericOk=numericIds.every(id=>el(id).value.trim()!==''&&Number.isFinite(raw[id])&&raw[id]>=0);
- const valid=numericOk&&p>0&&raw.commission<=100&&raw.tax<=100&&r+t<1&&Number.isInteger(q)&&q>=1;
+ const valid=numericOk&&p>0&&raw.commission<=100&&raw.tax<=100&&r+t<1&&Number.isSafeInteger(q)&&q>=1;
  const fee=p*r,tax=p*t,ops=l+a+o+s+pack+ret,expenses=c+fee+tax+ops,profit=p-expenses,margin=p?profit/p*100:0;
  const denom=1-r-t,be=valid?(c+ops)/denom:NaN;
  el('profit').textContent=valid?show(profit):'Проверь данные';el('profit').className='profit '+(valid&&profit>=0?'positive':'negative');
- el('margin').textContent=valid?margin.toFixed(1).replace('.',',')+'%':'—';el('total').textContent=valid?show(profit*q):'—';el('expenses').textContent=valid?show(expenses):'—';el('breakeven').textContent=valid?show(be):'—';
+ el('margin').textContent=valid?margin.toFixed(1).replace('.',',')+'%':'—';el('total').textContent=valid?show(profit*q):'—';el('expenses').textContent=valid?show(expenses*q):'—';el('expensePerUnit').textContent=valid?show(expenses):'—';el('breakeven').textContent=valid?show(be):'—';
  el('feeValue').textContent=valid?show(fee):'—';el('taxValue').textContent=valid?show(tax):'—';el('costValue').textContent=valid?show(c):'—';el('opsValue').textContent=valid?show(ops):'—';
  el('marketLabel').textContent=el('market').value+' · по введённым параметрам';
  el('validation').textContent=valid?'Важно: предварительная модель. Тарифы WB подставляются только после загрузки официальных JSON-ответов API. Ozon и другие площадки пока рассчитываются по введённым вручную ставкам. Проверь актуальные удержания в кабинете продавца.':'Проверь данные: цена должна быть больше нуля; расходы не могут быть отрицательными; комиссия и налог должны быть от 0 до 100%, а вместе меньше 100%; количество продаж должно быть целым числом не меньше 1.';
- return {market:el('market').value,price:p,cost:c,commission:raw.commission,logistics:l,ads:a,other:o,storage:s,packaging:pack,returns:ret,tax:raw.tax,quantity:q,profit,margin,total:profit*q,expenses,breakeven:be,valid};
+ return {market:el('market').value,price:p,cost:c,commission:raw.commission,logistics:l,ads:a,other:o,storage:s,packaging:pack,returns:ret,tax:raw.tax,quantity:q,profit,margin,total:profit*q,expenses,expensesPerUnit:expenses,expensesTotal:expenses*q,breakeven:be,valid};
 }
 function resetExample(){
  for(const id of ids){if(id==='market')continue;const field=el(id);if(!field)continue;field.value='';}
