@@ -1,0 +1,7 @@
+{
+  "runtime": "node_web",
+  "startCommand": "npm start",
+  "port": 3000,
+  "memory_mb": 256,
+  "cpu_quota": 0.25
+}
