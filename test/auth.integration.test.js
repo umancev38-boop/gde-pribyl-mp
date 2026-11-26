@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import pg from "pg";
 import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "../lib/entitlements.js";
@@ -72,19 +72,29 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
       "CORS preflight must explicitly allow DELETE for marketplace disconnect"
     );
 
-    const email = "integration-" + randomUUID() + "@example.test";
-    const password = "ValidPass123!";
+    testPool = new pg.Pool({ connectionString: databaseUrl });
     const originHeader = { Origin: origin };
-
-    const registration = await request("/api/auth/register", {
+    const seedSmsCode = async (phone, code) => {
+      const salt = randomUUID();
+      const codeHash = createHash("sha256").update(salt + ":" + code).digest("hex");
+      await testPool.query(
+        "INSERT INTO phone_auth_codes(phone,code_hash,code_salt,expires_at,attempts,last_sent_at,created_at) VALUES($1,$2,$3,NOW()+INTERVAL '5 minutes',0,NOW(),NOW()) ON CONFLICT(phone) DO UPDATE SET code_hash=EXCLUDED.code_hash,code_salt=EXCLUDED.code_salt,expires_at=EXCLUDED.expires_at,attempts=0,last_sent_at=NOW(),created_at=NOW()",
+        [phone, codeHash, salt]
+      );
+    };
+    const phone = "15551234567";
+    const code = "123456";
+    await seedSmsCode(phone, code);
+    const registration = await request("/api/auth/sms/verify", {
       method: "POST",
-      headers: originHeader,
-      body: JSON.stringify({ email, password })
+      headers: { ...originHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, code })
     });
-    assert.equal(registration.status, 201);
+    assert.equal(registration.status, 200);
     const registrationData = await registration.json();
     assert.equal(registrationData.plan, "free");
     assert.equal(registrationData.limits.products, 5);
+    assert.equal(registrationData.user.phone, phone);
     const firstCookie = registration.headers.get("set-cookie")?.match(/gpm_session=([^;]+)/)?.[1];
     assert.ok(firstCookie, "registration must issue a session cookie");
 
@@ -135,7 +145,7 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     assert.equal(paymentAttempt.status, 503, "Payments must remain disabled without Robokassa credentials");
 
     assert.equal(me.status, 200);
-    assert.equal((await me.json()).user.email, email);
+    assert.equal((await me.json()).user.phone, phone);
 
     const products = Array.from({ length: 5 }, (_, i) => ({ id: "p" + i, name: "Test product " + i }));
     const history = Array.from({ length: 20 }, (_, i) => ({ id: "h" + i, profit: i }));
@@ -203,12 +213,15 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     assert.ok(deletionData.products.some(item => item.id === "p-readded"), "a re-added identical product with a new ID must remain active");
     assert.deepEqual(new Set(deletionData.deletedIds), new Set(["p0", "h0"]));
 
-    const duplicate = await request("/api/auth/register", {
+    await seedSmsCode(phone, code);
+    const repeatSmsLogin = await request("/api/auth/sms/verify", {
       method: "POST",
-      headers: originHeader,
-      body: JSON.stringify({ email, password })
+      headers: { ...originHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, code })
     });
-    assert.equal(duplicate.status, 409);
+    assert.equal(repeatSmsLogin.status, 200);
+    assert.equal(String((await repeatSmsLogin.json()).user.id), String(registrationData.user.id),
+      "a verified phone must return the existing account, not create a duplicate");
 
     const logout = await request("/api/auth/logout", {
       method: "POST",
@@ -219,10 +232,11 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     const afterLogout = await request("/api/auth/me", { headers: { Cookie: "gpm_session=" + firstCookie } });
     assert.equal(afterLogout.status, 401);
 
-    const login = await request("/api/auth/login", {
+    await seedSmsCode(phone, code);
+    const login = await request("/api/auth/sms/verify", {
       method: "POST",
-      headers: originHeader,
-      body: JSON.stringify({ email, password })
+      headers: { ...originHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, code })
     });
     assert.equal(login.status, 200);
     const secondCookie = login.headers.get("set-cookie")?.match(/gpm_session=([^;]+)/)?.[1];
@@ -238,7 +252,6 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     assert.deepEqual(restored.deletedIds, ["p0", "h0"], "deletion tombstones must survive logout and login");
 
     // Verify marketplace records are isolated by user_id, even for two paid accounts.
-    testPool = new pg.Pool({ connectionString: databaseUrl });
     const activatePro = async userId => {
       const payment = await testPool.query(
         "INSERT INTO payments(plan_code,amount,status,robokassa_invoice_id,user_id) VALUES('pro',0,'paid',$1,$2) RETURNING id",
@@ -251,12 +264,14 @@ test("registration, login, logout, PostgreSQL sync and FREE limits", {
     };
     await activatePro(registrationData.user.id);
 
-    const otherRegistration = await request("/api/auth/register", {
+    const otherPhone = "15559876543";
+    await seedSmsCode(otherPhone, code);
+    const otherRegistration = await request("/api/auth/sms/verify", {
       method: "POST",
-      headers: originHeader,
-      body: JSON.stringify({ email: "integration-" + randomUUID() + "@example.test", password })
+      headers: { ...originHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: otherPhone, code })
     });
-    assert.equal(otherRegistration.status, 201);
+    assert.equal(otherRegistration.status, 200);
     const otherRegistrationData = await otherRegistration.json();
     const otherCookie = otherRegistration.headers.get("set-cookie")?.match(/gpm_session=([^;]+)/)?.[1];
     assert.ok(otherCookie);
