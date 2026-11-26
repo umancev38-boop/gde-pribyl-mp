@@ -78,6 +78,10 @@ const SITE_URL = process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || "https://gde-pribyl-mp-api.onrender.com";
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "";
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || "";
+const SMS_CONFIGURED = Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
 const MERCHANT_LOGIN = process.env.ROBOKASSA_MERCHANT_LOGIN || "";
 const PASSWORD_1 = process.env.ROBOKASSA_PASSWORD_1 || "";
 const PASSWORD_2 = process.env.ROBOKASSA_PASSWORD_2 || "";
@@ -155,13 +159,26 @@ async function initDb() {
     await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id BIGSERIAL PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
+      email TEXT UNIQUE,
+      phone_e164 TEXT UNIQUE,
+      phone_verified BOOLEAN NOT NULL DEFAULT FALSE,
       password_salt TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       email_verified BOOLEAN NOT NULL DEFAULT TRUE
     );
+    ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_e164 TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT FALSE;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_phone_e164_unique_idx ON users(phone_e164) WHERE phone_e164 IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS pending_phone_registrations (
+      phone_e164 TEXT PRIMARY KEY,
+      password_salt TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS auth_tokens (
       token_hash TEXT PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -292,6 +309,24 @@ async function createAuthToken(userId,purpose,expiresInHours) {
     [hashToken(token),userId,purpose,expiresInHours]);
   return token;
 }
+function normalizePhone(value) {
+  const phone=String(value||"").trim().replace(/[\\s().-]/g,"");
+  return /^\\+[1-9]\\d{7,14}$/.test(phone) ? phone : "";
+}
+async function twilioVerify(action,phone,code) {
+  if(!SMS_CONFIGURED) throw new Error("SMS provider is not configured");
+  const url="https://verify.twilio.com/v2/Services/"+encodeURIComponent(TWILIO_VERIFY_SERVICE_SID)+"/Verifications"+(action==="check"?"/Check":"");
+  const body=new URLSearchParams(action==="check"?{To:phone,Code:code}:{To:phone,Channel:"sms"});
+  const auth=Buffer.from(TWILIO_ACCOUNT_SID+":"+TWILIO_AUTH_TOKEN).toString("base64");
+  const response=await fetch(url,{method:"POST",headers:{Authorization:"Basic "+auth,"Content-Type":"application/x-www-form-urlencoded"},body});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok) {
+    console.error("SMS provider request failed:",response.status,data.code||"");
+    if(response.status===400||response.status===404) throw new Error("Не удалось подтвердить номер или код. Проверь номер и код.");
+    throw new Error("Сервис SMS временно недоступен.");
+  }
+  return data;
+}
 async function sendAccountEmail(to,subject,html) {
   if(!RESEND_API_KEY||!EMAIL_FROM) throw new Error("Email delivery is not configured");
   const response=await fetch("https://api.resend.com/emails",{
@@ -316,7 +351,7 @@ async function requireUser(req,res,next) {
   try {
     const token=cookieValue(req,SESSION_COOKIE);
     if(!token||token.length>128) return res.status(401).json({error:"Войди в аккаунт, чтобы продолжить."});
-    const result=await pool.query(`SELECT u.id,u.email FROM user_sessions s JOIN users u ON u.id=s.user_id
+    const result=await pool.query(`SELECT u.id,u.email,u.phone_e164 AS phone FROM user_sessions s JOIN users u ON u.id=s.user_id
       WHERE s.token_hash=$1 AND s.expires_at>NOW() LIMIT 1`,[hashToken(token)]);
     if(!result.rowCount) return res.status(401).json({error:"Сессия завершена. Войди снова."});
     req.user=result.rows[0]; next();
@@ -330,6 +365,92 @@ async function accountPlan(userId) {
   const plan=normalizePlanCode(result.rows[0]?.plan_code);
   return {plan,expiresAt:result.rows[0]?.expires_at||null,limits:PLAN_ENTITLEMENTS[plan]};
 }
+app.post("/api/auth/phone/register",rateLimit({max:3,windowMs:10*60_000}),sameOrigin,async(req,res)=>{
+  if(!pool) return res.status(503).json({error:"Регистрация временно недоступна."});
+  const phone=normalizePhone(req.body?.phone),password=String(req.body?.password||"");
+  if(!phone) return res.status(400).json({error:"Укажи номер в международном формате, например +79991234567."});
+  if(password.length<10||password.length>128) return res.status(400).json({error:"Пароль должен содержать от 10 до 128 символов."});
+  try {
+    const exists=await pool.query("SELECT id FROM users WHERE phone_e164=$1",[phone]);
+    if(exists.rowCount) return res.status(409).json({error:"Этот номер уже зарегистрирован. Войди или восстанови пароль."});
+    const salt=crypto.randomBytes(16).toString("hex"),passwordHash=await derivePassword(password,salt);
+    await pool.query(`INSERT INTO pending_phone_registrations(phone_e164,password_salt,password_hash,expires_at)
+      VALUES($1,$2,$3,NOW()+INTERVAL '15 minutes')
+      ON CONFLICT(phone_e164) DO UPDATE SET password_salt=EXCLUDED.password_salt,password_hash=EXCLUDED.password_hash,expires_at=EXCLUDED.expires_at,created_at=NOW()`,[phone,salt,passwordHash]);
+    await twilioVerify("send",phone);
+    return res.json({ok:true,verificationRequired:true,message:"SMS с кодом отправлено. Введи код, чтобы завершить регистрацию."});
+  } catch(error) {
+    console.error("Phone registration failed:",error.message);
+    return res.status(503).json({error:error.message==="SMS provider is not configured"?"SMS-отправка пока не настроена на сервере.":"Не удалось отправить SMS. Проверь номер и повтори позже."});
+  }
+});
+app.post("/api/auth/phone/verify-registration",rateLimit({max:5}),sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone),code=String(req.body?.code||"").trim();
+  if(!phone||!/^\\d{4,10}$/.test(code)) return res.status(400).json({error:"Проверь номер телефона и SMS-код."});
+  const client=await pool.connect();
+  try {
+    const pending=await client.query("SELECT password_salt,password_hash FROM pending_phone_registrations WHERE phone_e164=$1 AND expires_at>NOW()",[phone]);
+    if(!pending.rowCount) return res.status(400).json({error:"Заявка на регистрацию истекла. Запроси новый код."});
+    const checked=await twilioVerify("check",phone,code);
+    if(checked.status!=="approved") return res.status(400).json({error:"Неверный или просроченный SMS-код."});
+    await client.query("BEGIN");
+    const created=await client.query(`INSERT INTO users(email,phone_e164,phone_verified,password_salt,password_hash,email_verified)
+      VALUES(NULL,$1,TRUE,$2,$3,TRUE) ON CONFLICT(phone_e164) DO NOTHING RETURNING id,phone_e164`,
+      [phone,pending.rows[0].password_salt,pending.rows[0].password_hash]);
+    if(!created.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({error:"Этот номер уже зарегистрирован."}); }
+    await client.query("DELETE FROM pending_phone_registrations WHERE phone_e164=$1",[phone]);
+    const token=await createUserSession(created.rows[0].id,client);
+    await client.query("COMMIT");
+    sessionCookie(res,token);
+    return res.status(201).json({user:{id:created.rows[0].id,phone:created.rows[0].phone_e164},...await accountPlan(created.rows[0].id)});
+  } catch(error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    console.error("Phone verification failed:",error.message);
+    return res.status(503).json({error:"Не удалось завершить регистрацию. Повтори попытку позже."});
+  } finally { client.release(); }
+});
+app.post("/api/auth/phone/login",rateLimit({max:10}),sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone),password=String(req.body?.password||"");
+  if(!phone||password.length>128) return res.status(400).json({error:"Проверь номер телефона и пароль."});
+  try {
+    const found=await pool.query("SELECT id,phone_e164,password_salt,password_hash,phone_verified FROM users WHERE phone_e164=$1",[phone]);
+    if(!found.rowCount) return res.status(401).json({error:"Неверный номер или пароль."});
+    const user=found.rows[0],candidate=await derivePassword(password,user.password_salt);
+    if(!safeEqual(candidate,user.password_hash)||!user.phone_verified) return res.status(401).json({error:"Неверный номер или пароль."});
+    const token=await createUserSession(user.id);sessionCookie(res,token);
+    return res.json({user:{id:user.id,phone:user.phone_e164},...await accountPlan(user.id)});
+  } catch(error) { console.error("Phone login failed:",error.message);return res.status(500).json({error:"Не удалось выполнить вход."}); }
+});
+app.post("/api/auth/phone/forgot-password",rateLimit({max:3,windowMs:10*60_000}),sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone);
+  if(!phone) return res.status(400).json({error:"Укажи номер в международном формате, например +79991234567."});
+  try {
+    const found=await pool.query("SELECT id FROM users WHERE phone_e164=$1 AND phone_verified=TRUE",[phone]);
+    if(found.rowCount) await twilioVerify("send",phone);
+    return res.json({ok:true,message:"Если подтверждённый аккаунт с таким номером существует, SMS-код отправлен."});
+  } catch(error) { console.error("Phone password reset request failed:",error.message);return res.status(503).json({error:"Не удалось отправить SMS. Проверь настройки SMS-сервиса."}); }
+});
+app.post("/api/auth/phone/reset-password",rateLimit({max:5}),sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone),code=String(req.body?.code||"").trim(),password=String(req.body?.password||"");
+  if(!phone||!/^\\d{4,10}$/.test(code)) return res.status(400).json({error:"Проверь номер телефона и SMS-код."});
+  if(password.length<10||password.length>128) return res.status(400).json({error:"Новый пароль должен содержать от 10 до 128 символов."});
+  try {
+    const checked=await twilioVerify("check",phone,code);
+    if(checked.status!=="approved") return res.status(400).json({error:"Неверный или просроченный SMS-код."});
+    const salt=crypto.randomBytes(16).toString("hex"),passwordHash=await derivePassword(password,salt),client=await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const changed=await client.query("UPDATE users SET password_salt=$1,password_hash=$2 WHERE phone_e164=$3 AND phone_verified=TRUE RETURNING id",[salt,passwordHash,phone]);
+      if(!changed.rowCount) { await client.query("ROLLBACK");return res.status(400).json({error:"Подтверждённый аккаунт с таким номером не найден."}); }
+      await client.query("DELETE FROM user_sessions WHERE user_id=$1",[changed.rows[0].id]);
+      await client.query("DELETE FROM auth_tokens WHERE user_id=$1",[changed.rows[0].id]);
+      await client.query("COMMIT");clearSession(res);
+      return res.json({ok:true,message:"Пароль изменён. Теперь войди с новым паролем."});
+    } catch(error) { await client.query("ROLLBACK").catch(()=>{});throw error; }
+    finally { client.release(); }
+  } catch(error) { console.error("Phone password reset failed:",error.message);return res.status(503).json({error:"Не удалось изменить пароль. Повтори попытку."}); }
+});
+
 app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
   if(!pool) return res.status(503).json({error:"Регистрация временно недоступна."});
   const email=String(req.body?.email||"").trim().toLowerCase();
