@@ -253,7 +253,9 @@ function clearSession(res) {
   res.clearCookie(SESSION_COOKIE,{httpOnly:true,secure:true,sameSite:"lax",path:"/"});
 }
 function sameOrigin(req,res,next) {
-  if (!isAllowedOrigin(req)) return res.status(403).json({error:"Запрос отклонён: неверный источник."});
+  if (!req.headers.origin || !isAllowedOrigin(req)) {
+    return res.status(403).json({error:"Запрос отклонён: неверный источник."});
+  }
   next();
 }
 function derivePassword(password,salt) {
