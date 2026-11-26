@@ -680,7 +680,7 @@ async function refreshSubscription(){
 }
 async function authenticate(mode){
  const phone=el('accountPhone').value.trim(),password=el('accountPassword').value;
- if(!/^\\+[1-9]\\d{7,14}$/.test(phone.replace(/[\\s().-]/g,'')))return setAccountStatus('Укажи телефон в международном формате, например +79991234567.',true);
+ if(!/^\+[1-9]\d{7,14}$/.test(phone.replace(/[\s().-]/g,'')))return setAccountStatus('Укажи телефон в международном формате, например +79991234567.',true);
  if(password.length<10||password.length>128)return setAccountStatus('Пароль должен содержать от 10 до 128 символов.',true);
  const buttons=['registerAccount','loginAccount'];buttons.forEach(id=>el(id).disabled=true);
  try{
@@ -704,20 +704,20 @@ el('verifyPhoneRegistration').addEventListener('click',async()=>{
 });
 el('legacyEmailLogin').addEventListener('click',async()=>{
  const email=el('accountEmail').value.trim(),password=el('accountPassword').value;
- if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return setAccountStatus('Укажи корректный e-mail старого аккаунта.',true);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAccountStatus('Укажи корректный e-mail старого аккаунта.',true);
  try{const data=await apiRequest('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
   accountUser=data.user;currentPlan=data.plan||'free';accountLimits=data.limits||PLAN_LIMITS[currentPlan]||PLAN_LIMITS.free;accountExpiry=data.expiresAt||null;setAccountStatus('Вход выполнен.');await refreshSubscription();
  }catch(error){setAccountStatus(error.message,true)}
 });
 el('resendVerification').addEventListener('click',async()=>{
  const email=el('accountEmail').value.trim();
- if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return setAccountStatus('Укажи e-mail старого аккаунта.',true);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAccountStatus('Укажи e-mail старого аккаунта.',true);
  try{const data=await apiRequest('/api/auth/resend-verification',{method:'POST',body:JSON.stringify({email})});setAccountStatus(data.message)}
  catch(error){setAccountStatus(error.message,true)}
 });
 el('forgotPassword').addEventListener('click',async()=>{
  const phone=el('accountPhone').value.trim();
- if(!/^\\+[1-9]\\d{7,14}$/.test(phone.replace(/[\\s().-]/g,'')))return setAccountStatus('Сначала укажи телефон в международном формате.',true);
+ if(!/^\+[1-9]\d{7,14}$/.test(phone.replace(/[\s().-]/g,'')))return setAccountStatus('Сначала укажи телефон в международном формате.',true);
  const button=el('forgotPassword');button.disabled=true;
  try{const data=await apiRequest('/api/auth/phone/forgot-password',{method:'POST',body:JSON.stringify({phone})});el('resetPasswordPanel').hidden=false;setAccountStatus(data.message)}
  catch(error){setAccountStatus(error.message,true)}finally{button.disabled=false}
@@ -852,10 +852,10 @@ function applyOzonCommission(){
 function renderOzonSnapshot(snapshot){
  const node=el('ozonTariffDetails');
  if(!snapshot?.items?.length){node.textContent=snapshot?.note||'';refreshOzonProductOptions();return}
- node.textContent='Примеры полученных данных (первые 8 товаров):\\n'+snapshot.items.slice(0,8).map(item=>{
+ node.textContent='Примеры полученных данных (первые 8 товаров):\n'+snapshot.items.slice(0,8).map(item=>{
   const c=item.commissions||{};
   return (item.offerId||item.productId)+' · комиссия FBO/FBS '+(c.salesPercentFbo??'—')+'/'+(c.salesPercentFbs??'—')+'% · эквайринг '+(item.acquiring??'—')+' ₽ · FBO доставка/транзит мин–макс/возврат '+(c.fboDeliveryToCustomer??'—')+'/'+(c.fboDirectFlowMin??'—')+'–'+(c.fboDirectFlowMax??'—')+'/'+(c.fboReturn??'—')+' ₽ · FBS первая миля мин–макс/транзит мин–макс/доставка/возврат '+(c.fbsFirstMileMin??'—')+'–'+(c.fbsFirstMileMax??'—')+'/'+(c.fbsDirectFlowMin??'—')+'–'+(c.fbsDirectFlowMax??'—')+'/'+(c.fbsDeliveryToCustomer??'—')+'/'+(c.fbsReturn??'—')+' ₽';
- }).join('\\n');
+ }).join('\n');
  refreshOzonProductOptions();
 }
 function renderMarketplaceState(){
