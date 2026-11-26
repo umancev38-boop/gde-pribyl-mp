@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Калькулятор прибыли для продавцов Wildberries и Ozon: расходы, маржинальность и точка безубыточности. Бесплатный старт и расширенные тарифы.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Где прибыль МП">
+<meta property="og:title" content="Где прибыль МП — сервис аналитики для продавцов маркетплейсов">
+<meta property="og:description" content="Рассчитай прибыль, маржинальность и расходы товара. Бесплатный калькулятор и расширенные инструменты для продавцов маркетплейсов.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Где прибыль МП — сервис аналитики для продавцов маркетплейсов">
+<meta name="twitter:description" content="Платный сервис для продавцов Wildberries и Ozon: расчёт прибыли и аналитика по подписке.">
+<meta name="theme-color" content="#101c2b">
+<title>Где прибыль МП — сервис аналитики для продавцов маркетплейсов</title>
+<style>
+:root{--bg:#f3f6f8;--ink:#142333;--muted:#667789;--navy:#101c2b;--green:#168653;--line:#e1e8ed;--white:#fff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--navy);color:white;padding:22px max(20px,calc((100% - 1080px)/2));display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{font-weight:850;letter-spacing:.04em;font-size:19px}.brand span{color:#58d69a}.tag{color:#b8c8d6;font-size:13px}
+main{max-width:1080px;margin:34px auto;padding:0 18px}.hero{margin-bottom:24px}.hero h1{font-size:clamp(28px,5vw,42px);line-height:1.12;margin:0 0 10px;letter-spacing:-.035em}.hero p{margin:0;color:var(--muted);max-width:720px}
+.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:start}.panel{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 30px #1423330a}
+h2{font-size:19px;margin:0 0 18px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}label{font-size:13px;color:#506174;font-weight:650}input,select{width:100%;border:1px solid #d6e0e7;border-radius:10px;padding:12px 13px;font:inherit;color:var(--ink);background:white;outline:none}input:focus,select:focus{border-color:#168653;box-shadow:0 0 0 3px #16865318}.hint{font-size:11px;color:#8795a2}
+.result{background:var(--navy);color:white;border-radius:15px;padding:20px;margin-bottom:14px}.result small{color:#bdcbd7}.profit{font-size:36px;font-weight:850;letter-spacing:-.04em;margin:3px 0 0}.profit.negative{color:#ff9d9d}.profit.positive{color:#70e0a6}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#f5f8fa;border-radius:12px;padding:13px}.metric span{display:block;color:var(--muted);font-size:12px}.metric strong{font-size:18px}.breakdown{margin-top:18px}.line{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}.line:last-child{border:0}.line span{color:var(--muted)}
+.note{margin-top:18px;padding:13px 14px;background:#fff8e8;border:1px solid #f2e3bd;border-radius:12px;color:#70551c;font-size:12px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.backup{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.backup p{font-size:12px;color:var(--muted);margin:0 0 10px}.fileButton{display:inline-flex;align-items:center;background:#edf2f5;color:#26394b;border-radius:10px;padding:11px 15px;font-weight:700;font-size:14px;cursor:pointer}.status{font-size:12px;color:var(--green);min-height:18px;margin-top:8px}button{border:0;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer;background:var(--green);color:white}button.secondary{background:#edf2f5;color:#26394b}
+.records{margin-top:20px}.recordsIntro{margin:-8px 0 16px;color:var(--muted);font-size:13px}.recordsGrid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.records h3{font-size:15px;margin:0 0 10px}.recordList{display:grid;gap:9px}.record{border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}.record strong{display:block;font-size:14px}.record small{display:block;color:var(--muted);font-size:12px}.recordActions{display:flex;gap:6px;flex-shrink:0}.recordActions button{padding:7px 9px;font-size:12px}.empty{color:var(--muted);font-size:13px;margin:0;padding:10px 0}.record button.delete{background:#fff0f0;color:#a52a2a}
+footer{max-width:1080px;margin:22px auto 40px;padding:0 18px;color:#82909c;font-size:12px}
+@media(max-width:760px){main{margin-top:25px}.layout{grid-template-columns:1fr}.fields{grid-template-columns:1fr 1fr}.panel{padding:18px}.recordsGrid{grid-template-columns:1fr}}
+@media(max-width:420px){.fields{grid-template-columns:1fr}.field.full{grid-column:auto}header{align-items:flex-start;flex-direction:column}}
+
+.tariffPanel{margin-top:20px}.tariffIntro{margin:-8px 0 16px;color:var(--muted);font-size:13px}
+.tariffGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tariffStatus{margin:12px 0;padding:12px 14px;border-radius:10px;background:#f2f7f4;color:#315b43;font-size:13px}
+.tariffStatus.warn{background:#fff8e8;color:#70551c}
+.tariffTools{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.tariffTools input[type=file]{display:none}
+.tariffData{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+@media(max-width:760px){.tariffGrid{grid-template-columns:1fr}}
+
+.pricing{margin:20px 0}.pricingIntro{color:var(--muted);margin:-8px 0 16px;font-size:13px}.priceGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.priceCard{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fff}.priceCard h3{margin:0 0 5px;font-size:16px}.priceValue{font-size:25px;font-weight:850;letter-spacing:-.03em}.priceCard p{font-size:13px;color:var(--muted);margin:8px 0 0}.priceNote{font-size:12px;color:var(--muted);margin-top:12px}.legalLinks{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}.legalLinks a{color:#315b43;text-decoration:none;font-weight:650}.legalLinks a:hover{text-decoration:underline}.serviceDescription{margin:0 0 16px;padding:14px;background:#f5f8fa;border:1px solid var(--line);border-radius:12px}.serviceDescription p{font-size:13px;color:var(--muted);margin:6px 0}.consentRow{display:flex;gap:9px;align-items:flex-start;max-width:680px;margin:12px 0;font-size:12px;color:var(--muted)}.consentRow input{width:auto;margin-top:4px}.siteDetails{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted)}.siteDetails p{margin:4px 0}
+@media(max-width:760px){.priceGrid{grid-template-columns:1fr}}
+.portfolioTable{width:100%;border-collapse:collapse;font-size:13px}.portfolioTable th,.portfolioTable td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.portfolioTable th{color:var(--muted);font-weight:700}.portfolioTableWrap{overflow-x:auto}.insightItem{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:8px 0;font-size:13px}.insightItem strong{display:block;margin-bottom:3px}.insightItem.warn{background:#fff8e8;border-color:#f2e3bd}.insightItem.good{background:#f2f7f4;border-color:#dcebe1}
+.accountPanel{margin:20px 0}.accountGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.accountActions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.accountMeta{font-size:13px;color:var(--muted);margin:8px 0}.accountStatus{font-size:13px;min-height:20px;margin-top:10px;color:var(--green)}.accountStatus.warn{color:#8a5b0b}@media(max-width:600px){.accountGrid{grid-template-columns:1fr}}
+
+/* Android and narrow-screen hardening */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{min-width:320px;overflow-x:hidden}
+main,footer{width:100%}
+.layout>*,.panel,.field{min-width:0}
+input,select,textarea{font-size:16px;min-height:44px;touch-action:manipulation}
+button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.line b,.metric strong,.record strong,.record small{overflow-wrap:anywhere;word-break:normal}
+@media(max-width:760px){
+ header{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+ main{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+ .layout{grid-template-columns:minmax(0,1fr)}
+ .layout>*{width:100%;min-width:0}
+ .panel{padding:16px}
+ .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .actions{gap:8px}
+ .actions button,.actions .fileButton{max-width:100%;min-width:0}
+ .record{align-items:flex-start;flex-wrap:wrap}
+ .recordActions{margin-left:auto}
+ .portfolioTableWrap{max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+}
+@media(max-width:480px){
+ .fields{grid-template-columns:minmax(0,1fr)}
+ .field.full{grid-column:1}
+ .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .actions button,.actions .fileButton{width:100%;justify-content:center;text-align:center;padding-left:8px;padding-right:8px}
+ .profit{font-size:clamp(28px,9vw,36px)}
+ .metric{min-width:0;padding:11px}
+ .metric strong{font-size:clamp(14px,4vw,18px)}
+ .line{align-items:flex-start}
+ .line span{min-width:0;flex:1}
+ .line b{max-width:55%;text-align:right}
+}
+@media(hover:none) and (pointer:coarse){
+ button,.fileButton{cursor:pointer}
+ input,select{scroll-margin-block:100px}
+}
+
+</style>
+</head>
+<body>
+<header><div><div class="brand">ГДЕ ПРИБЫЛЬ <span>МП</span> (МАРКЕТПЛЕЙСОВ)</div><div class="tag">Инструмент продавца маркетплейсов</div></div><div class="tag">Калькулятор прибыли</div></header>
+<main>
+<section class="hero"><h1>Считай прибыль,<br>а не только оборот.</h1><p>Введи цену, закупку и расходы. Калькулятор покажет ориентировочную прибыль с одной продажи и маржинальность.</p></section>
+<div class="layout">
+<section class="panel">
+<h2>Параметры товара</h2>
+<div class="fields">
+<div class="field full"><label for="market">Площадка</label><select id="market"><option>Wildberries</option><option>Ozon</option></select></div>
+<div class="field"><label for="price">Цена продажи, ₽</label><input id="price" type="number" min="0" step="0.01" value="2490"></div>
+<div class="field"><label for="cost">Закупка товара, ₽</label><input id="cost" type="number" min="0" step="0.01" value="800"></div>
+<div class="field"><label for="commission">Комиссия площадки, % (введи свою ставку)</label><input id="commission" type="number" min="0" max="100" step="0.1" value="15"></div>
+<div class="field"><label for="logistics">Логистика, ₽</label><input id="logistics" type="number" min="0" step="0.01" value="250"></div>
+<div class="field"><label for="ads">Реклама на единицу, ₽</label><input id="ads" type="number" min="0" step="0.01" value="200"></div>
+<div class="field"><label for="other">Прочие расходы, ₽</label><input id="other" type="number" min="0" step="0.01" value="140"></div>
+<div class="field"><label for="storage">Хранение на единицу, ₽</label><input id="storage" type="number" min="0" step="0.01" value="0"></div>
+<div class="field"><label for="packaging">Упаковка и маркировка, ₽</label><input id="packaging" type="number" min="0" step="0.01" value="0"></div>
+<div class="field"><label for="returns">Резерв на возвраты и брак, ₽</label><input id="returns" type="number" min="0" step="0.01" value="0"></div>
+<div class="field"><label for="tax">Налог, % от цены</label><input id="tax" type="number" min="0" max="100" step="0.1" value="6"></div>
+<div class="field"><label for="quantity">Количество продаж</label><input id="quantity" type="number" min="1" step="1" value="1"></div>
+</div>
+<div class="actions"><button id="reset" class="secondary" type="button">Сбросить пример</button><button id="copy" type="button">Скопировать расчёт</button><button id="saveProduct" type="button">Сохранить товар</button><button id="saveCalc" class="secondary" type="button">В историю</button></div>
+<div class="backup"><p><b>Резервная копия.</b> Сохрани товары и историю в файл, чтобы перенести их на другой телефон или восстановить после очистки браузера.</p><div class="actions"><button id="exportData" class="secondary" type="button">Скачать копию</button><label class="fileButton" for="importData">Восстановить из файла</label><input id="importData" type="file" accept="application/json,.json" hidden></div><div id="backupStatus" class="status" role="status" aria-live="polite"></div></div>
+</section>
+<aside class="panel">
+<h2>Результат расчёта</h2>
+<div class="result"><small>Ориентировочная чистая прибыль с единицы</small><div id="profit" class="profit positive">577,10 ₽</div><small id="marketLabel">Wildberries · по введённым параметрам</small></div>
+<div class="metrics">
+<div class="metric"><span>Маржинальность</span><strong id="margin">23,2%</strong></div>
+<div class="metric"><span>Прибыль на объём</span><strong id="total">577,10 ₽</strong></div>
+<div class="metric"><span>Расходы всего</span><strong id="expenses">1 912,90 ₽</strong></div>
+<div class="metric"><span>Расходы на единицу</span><strong id="expensePerUnit">1 912,90 ₽</strong></div>
+<div class="metric"><span>Безубыточная цена</span><strong id="breakeven">1 759,49 ₽</strong></div>
+</div>
+<div class="breakdown"><h2 style="margin:20px 0 6px">Расходы на одну единицу</h2>
+<div class="line"><span>Комиссия площадки</span><b id="feeValue">374 ₽</b></div>
+<div class="line"><span>Налог</span><b id="taxValue">149 ₽</b></div>
+<div class="line"><span>Закупка</span><b id="costValue">800 ₽</b></div>
+<div class="line"><span>Логистика, реклама и прочее</span><b id="opsValue">590 ₽</b></div>
+</div>
+<div id="validation" class="note" role="status" aria-live="polite">Важно: это предварительная модель. Тарифы WB можно подставить через блок «Тарифы Wildberries» после загрузки официальных JSON-ответов API. Ozon пока вводится вручную. Реальные удержания также зависят от возвратов, хранения, скидок и условий договора. Вводи фактические значения из кабинета продавца. Расчёт не является налоговой или финансовой консультацией.</div>
+</aside>
+</div>
+
+<section class="panel proFeature" id="targetPricePanel" aria-labelledby="targetPriceTitle">
+<h2 id="targetPriceTitle">Цена под целевую маржу · PRO</h2>
+<p class="recordsIntro">Укажи желаемую маржинальность. Сервис рассчитает цену продажи с учётом закупки, комиссии, налога и расходов на единицу.</p>
+<div id="targetPriceLockNotice" class="tariffStatus warn">Расчёт целевой цены доступен в PRO и BUSINESS.</div>
+<div id="targetPriceContent" hidden><div class="field"><label for="targetMargin">Целевая маржинальность, %</label><input id="targetMargin" type="number" min="0" max="90" step="0.5" value="20"></div><div class="result"><div id="targetPriceResult" class="profit">—</div><small id="targetPriceHint">Рекомендуемая цена продажи</small></div></div></section>
+<section class="panel tariffPanel" aria-labelledby="tariffTitle">
+<h2 id="tariffTitle">Тарифы Wildberries</h2>
+<p class="tariffIntro">Загрузи JSON-ответы официального WB API: комиссии по категориям и тарифы для коробов. Модуль выберет категорию и склад, рассчитает доставку и хранение по объёму и подставит значения в калькулятор.</p>
+<div class="tariffGrid">
+<div class="field">
+<label for="commissionFile">1. Файл комиссий WB (JSON)</label>
+<label class="fileButton" for="commissionFile">Загрузить комиссии</label>
+<input id="commissionFile" type="file" accept=".json,application/json">
+<span class="hint">Ответ метода GET /api/v1/tariffs/commission</span>
+</div>
+<div class="field">
+<label for="boxFile">2. Файл тарифов коробов (JSON)</label>
+<label class="fileButton" for="boxFile">Загрузить тарифы складов</label>
+<input id="boxFile" type="file" accept=".json,application/json">
+<span class="hint">Ответ GET /api/v1/tariffs/box?date=ГГГГ-ММ-ДД</span>
+</div>
+<div class="field">
+<label for="wbCategory">Категория товара</label>
+<select id="wbCategory" disabled><option value="">Сначала загрузи комиссии</option></select>
+</div>
+<div class="field">
+<label for="wbScheme">Схема продаж</label>
+<select id="wbScheme"><option value="fbo">FBW / со склада WB</option><option value="fbs">FBS / со склада продавца</option></select>
+</div>
+<div class="field">
+<label for="wbWarehouse">Склад WB</label>
+<select id="wbWarehouse" disabled><option value="">Сначала загрузи тарифы</option></select>
+</div>
+<div class="field">
+<label for="wbLiters">Объём товара, литров</label>
+<input id="wbLiters" type="number" min="0.1" step="0.1" value="1">
+</div>
+<div class="field">
+<label for="wbStorageDays">Дней хранения</label>
+<input id="wbStorageDays" type="number" min="0" step="1" value="0">
+</div>
+<div class="field">
+<label for="wbReturnReserve">Дополнительный резерв логистики, ₽</label>
+<input id="wbReturnReserve" type="number" min="0" step="0.01" value="0">
+<span class="hint">Не включён в прямую доставку WB. Добавь сюда свою оценку обратной логистики/возвратов.</span>
+</div>
+</div>
+<div class="tariffTools">
+<button id="applyWbTariffs" type="button" disabled>Подставить тарифы в расчёт</button>
+<button id="clearWbTariffs" type="button" class="secondary">Очистить загруженные тарифы</button>
+</div>
+<div id="wbTariffStatus" class="tariffStatus warn" role="status" aria-live="polite">Пока тарифы не загружены. Никакие ставки не подставляются автоматически.</div>
+<div class="tariffData">
+<p class="hint">Безопасность: ручной импорт JSON остаётся резервным способом. Для автоматического обновления подключи WB или Ozon в блоке ниже. API-ключи передаются серверу по HTTPS и сохраняются только в зашифрованном виде.</p>
+</div>
+</section>
+
+<section class="panel accountPanel" id="accountPanel" aria-labelledby="accountTitle">
+<h2 id="accountTitle">Аккаунт и облачная синхронизация</h2>
+<p class="recordsIntro">Вход и восстановление доступа по СМС. Если номер уже привязан, ты войдёшь в существующий аккаунт. Если номер новый, будет создан отдельный аккаунт. Если у тебя был прежний аккаунт без привязанного номера, сначала открой его с действующей сессией и привяжи телефон. Иначе прежние товары, история и подписка останутся в старом профиле.</p>
+<div class="accountGrid">
+<div class="field"><label id="smsPhoneLabel" for="smsPhone">Вход и регистрация по СМС</label><input id="smsPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+79991234567" maxlength="20"></div>
+<div class="field"><label for="smsCode">Код из СМС</label><input id="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6 цифр" maxlength="6"></div>
+</div>
+<div class="accountActions">
+<button id="requestSmsCode" type="button">Получить код по СМС</button>
+<button id="verifySmsCode" type="button" class="secondary">Подтвердить код и продолжить</button>
+</div>
+<p class="accountMeta">Номер подтверждается одноразовым кодом. Повторный запрос доступен через минуту. Отправка СМС включится после подключения SMS-провайдера на сервере.</p>
+<div class="accountActions"><button id="logoutAccount" type="button" class="secondary" hidden>Выйти</button><button id="syncAccount" type="button" class="secondary" hidden>Синхронизировать данные</button></div>
+<p id="accountMeta" class="accountMeta">Не выполнен вход. Локальные данные остаются на этом устройстве.</p>
+<div id="accountStatus" class="accountStatus" role="status" aria-live="polite"></div>
+</section>
+
+<section class="panel accountPanel" id="marketplacePanel" aria-labelledby="marketplaceTitle" hidden>
+<h2 id="marketplaceTitle">Подключение маркетплейсов · PRO / BUSINESS</h2>
+<p class="recordsIntro">Ключи передаются только на сервер по защищённому соединению и хранятся в зашифрованном виде. Они не сохраняются в браузере и не возвращаются в ответах API. Используй отдельные ключи только с правами чтения.</p>
+<div class="recordsGrid">
+<div class="panel" style="box-shadow:none">
+<h3>Wildberries</h3>
+<div class="field"><label for="wbApiToken">API-токен WB · категория «Тарифы»</label><input id="wbApiToken" type="password" autocomplete="off" placeholder="Вставь токен Wildberries"></div>
+<div class="accountActions"><button id="connectWb" type="button">Подключить WB</button><button id="refreshWb" class="secondary" type="button" hidden>Обновить тарифы</button><button id="disconnectWb" class="secondary" type="button" hidden>Отключить</button></div>
+<p id="wbConnectionStatus" class="accountStatus" role="status" aria-live="polite">Не подключён.</p>
+</div>
+<div class="panel" style="box-shadow:none">
+<h3>Ozon</h3>
+<div class="field"><label for="ozonClientId">Client-Id</label><input id="ozonClientId" type="text" autocomplete="off" placeholder="Client-Id из кабинета Ozon"></div>
+<div class="field"><label for="ozonApiKey">Seller API-ключ · Product read-only</label><input id="ozonApiKey" type="password" autocomplete="off" placeholder="Вставь API-ключ Ozon"></div>
+<div class="accountActions"><button id="connectOzon" type="button">Подключить Ozon</button><button id="refreshOzon" class="secondary" type="button" hidden>Обновить данные</button><button id="disconnectOzon" class="secondary" type="button" hidden>Отключить</button></div>
+<p id="ozonConnectionStatus" class="accountStatus" role="status" aria-live="polite">Не подключён.</p>
+<div class="accountActions"><button id="showOzonDemo" class="secondary" type="button">Показать демо-данные без API-ключа</button><button id="exitOzonDemo" class="secondary" type="button" hidden>Закрыть демо</button></div>
+<div class="field"><label for="ozonProductSearch">Найти товар по артикулу или ID</label><input id="ozonProductSearch" type="search" autocomplete="off" placeholder="Начни вводить артикул или ID"></div>
+<div class="field"><label for="ozonProductSelect">Товар из каталога Ozon</label><select id="ozonProductSelect" disabled><option value="">Сначала подключи Ozon</option></select></div>
+<div class="field"><label for="ozonScheme">Схема продажи</label><select id="ozonScheme"><option value="fbo">FBO</option><option value="fbs">FBS</option></select></div>
+<div class="accountActions"><button id="applyOzonCommission" type="button" disabled>Подставить комиссию в калькулятор</button></div>
+<p id="ozonApplyStatus" class="accountStatus" role="status" aria-live="polite">Комиссия будет подставлена только после выбора товара и схемы.</p>
+<p class="hint">Из Seller API v5 показываются отдельные составляющие: эквайринг, доставка до покупателя, транзитные диапазоны, первая миля FBS и возвраты. Калькулятор автоматически подставляет только процент комиссии. Не складывай все значения в одну строку логистики: это разные этапы, а часть диапазонов зависит от маршрута и может быть нулевой или предварительной. Итоговые расходы сверяй с начислениями в кабинете Ozon.</p>
+<p id="ozonTariffDetails" class="hint" style="white-space:pre-line;max-height:220px;overflow:auto"></p>
+</div>
+</div>
+<p id="marketplaceSummary" class="accountMeta">Сначала войди в аккаунт с активным тарифом PRO или BUSINESS.</p>
+</section>
+
+<section class="panel pricing" aria-labelledby="pricingTitle">
+<h2 id="pricingTitle">Онлайн-сервис «Где прибыль МП»</h2>
+<div class="serviceDescription">
+<p><b>Что это:</b> цифровой онлайн-инструмент для продавцов маркетплейсов. Помогает оценить экономику товара до продажи и контролировать основные статьи расходов.</p>
+<p><b>Возможности сервиса:</b> расчёт прибыли и маржинальности; учёт закупки, комиссии, логистики, рекламы, хранения, упаковки, возвратов и налога; расчёт точки безубыточности; сохранение товаров и истории; резервное копирование. PRO и BUSINESS включают расчёт цены под целевую маржу, подключение Wildberries и Ozon через серверные API, а также импорт JSON-тарифов Wildberries. BUSINESS дополнительно включает сводную аналитику ассортимента, рейтинг товаров по расчётной прибыли и экспорт CSV. Для Ozon доступно получение индивидуальных комиссий и логистики по товарам через Seller API; прочие расходы проверяются и дополняются вручную.</p>
+<p><b>Получение услуги:</b> доступ предоставляется дистанционно на сайте. После подтверждения оплаты Robokassa платный доступ активируется на 30 календарных дней. Физическая доставка не требуется.</p>
+<p><b>Продление:</b> автоматического списания нет. Следующий период оплачивается пользователем самостоятельно.</p>
+</div>
+<p class="pricingIntro">Выбирай тариф по масштабу работы. Все платные периоды длятся 30 календарных дней, без автоматического продления.</p>
+<div class="priceGrid">
+<article class="priceCard"><h3>FREE</h3><div class="priceValue">0 ₽</div><p><b>Для знакомства с сервисом</b></p><ul><li>Калькулятор прибыли и маржинальности</li><li>До 5 сохранённых товаров</li><li>До 20 расчётов в истории</li><li>Ручной ввод расходов</li></ul></article>
+<article class="priceCard"><h3>PRO</h3><div class="priceValue">499 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p><b>Для самостоятельного продавца</b></p><ul><li>До 200 сохранённых товаров</li><li>До 1 000 расчётов в истории</li><li>Расчёт цены под целевую маржу</li><li>Подключение Wildberries: комиссии и тарифы складов через API</li><li>Подключение Ozon: комиссии и логистика по товарам через Seller API</li><li>Резервный импорт JSON-тарифов WB</li><li>Подробный расчёт точки безубыточности</li></ul><p>Точный расчёт экономики и цены каждого товара.</p><button type="button" data-pay-plan="pro">Оформить PRO</button></article>
+<article class="priceCard"><h3>BUSINESS</h3><div class="priceValue">900 ₽ <span style="font-size:13px;font-weight:500;color:var(--muted)">/ 30 дней</span></div><p><b>Для магазинов с широким ассортиментом</b></p><ul><li>До 5 000 сохранённых товаров</li><li>До 10 000 расчётов в истории</li><li>Все возможности PRO</li><li>Сводная аналитика ассортимента</li><li>Рейтинг товаров по расчётной прибыли</li><li>Экспорт ассортимента в CSV для Excel</li></ul><p>Контроль общей картины и поиск самых прибыльных товаров.</p><button type="button" data-pay-plan="business">Оформить BUSINESS</button></article>
+</div>
+<p class="priceNote">Лимиты товаров и истории применяются сервером. Облачная синхронизация доступна после входа в аккаунт. BUSINESS рассчитан на большой ассортимент и включает сводную аналитику, рейтинг товаров и экспорт CSV.</p>
+
+<label class="consentRow"><input id="paymentConsent" type="checkbox"><span>Я ознакомился(лась) с <a href="/legal.html#offer" target="_blank" rel="noopener">публичной офертой</a> и <a href="/legal.html#privacy" target="_blank" rel="noopener">политикой обработки персональных данных</a> и принимаю условия оферты при оплате.</span></label>
+<p class="priceNote">Все платные тарифы действуют 30 дней и не продлеваются автоматически.</p>
+<div id="paymentStatus" class="status" role="status" aria-live="polite">Войди в аккаунт и прими условия оферты, чтобы оформить подписку.</div>
+<div class="legalLinks"><a href="/legal.html#offer">Публичная оферта</a><a href="/legal.html#refund">Возврат и отказ</a><a href="/legal.html#privacy">Политика персональных данных</a><a href="/legal.html#contacts">Контакты и реквизиты</a></div>
+</section>
+<section class="panel records" aria-labelledby="recordsTitle">
+<h2 id="recordsTitle">Мои товары и история расчётов</h2>
+<p class="recordsIntro">Гостевые данные и данные разных аккаунтов хранятся отдельно. После входа синхронизируется только профиль текущего аккаунта. Чтобы перенести гостевые записи в аккаунт, экспортируй резервную копию без входа, затем войди и импортируй файл. Резервная копия остаётся доступна в любой момент.</p>
+<div class="recordsGrid">
+<div><h3>Сохранённые товары</h3><div id="productsList" class="recordList"><p class="empty">Пока нет сохранённых товаров.</p></div></div>
+<div><h3>История расчётов</h3><div id="historyList" class="recordList"><p class="empty">Расчёты пока не сохранены.</p></div></div>
+</div>
+</section>
+<section class="panel businessFeature" id="businessPanel" aria-labelledby="businessTitle">
+<h2 id="businessTitle">Аналитика ассортимента · BUSINESS</h2>
+<p class="recordsIntro">Сводка по сохранённым товарам на этом устройстве. Это расчётный потенциал по введённым объёмам продаж, а не фактическая выручка маркетплейса.</p>
+<div id="businessLockNotice" class="tariffStatus warn">Сводная аналитика доступна в BUSINESS.</div>
+<div id="businessContent" hidden><div class="metrics">
+<div class="metric"><span>Товаров</span><strong id="portfolioCount">0</strong></div>
+<div class="metric"><span>Расчётная прибыль</span><strong id="portfolioProfit">0 ₽</strong></div>
+<div class="metric"><span>Расчётная выручка</span><strong id="portfolioRevenue">0 ₽</strong></div>
+<div class="metric"><span>Средняя маржинальность</span><strong id="portfolioMargin">—</strong></div></div>
+<div class="breakdown"><h3>Сравнение товаров</h3><p class="hint">Сопоставление сохранённых расчётов по прибыли, маржинальности и объёму продаж.</p><div id="portfolioComparison" class="portfolioTableWrap"></div></div>
+<div class="breakdown"><h3>Что требует внимания</h3><p class="hint">Подсказки формируются по введённым расходам и расчётной прибыли, а не по фактическим отчётам маркетплейса.</p><div id="portfolioInsights"></div></div>
+<div class="breakdown"><h3>Пять лидеров по расчётной прибыли</h3><div id="portfolioRanking" class="recordList"></div></div>
+<button id="exportPortfolioCsv" type="button">Экспорт ассортимента в CSV</button></div></section>
+</main>
+<footer>Где прибыль МП. Расчёты и товары хранятся локально и могут синхронизироваться с облачным аккаунтом. Вручную загруженные JSON-тарифы остаются на устройстве; подключённые API-тарифы обновляются сервером по запросу.
+<div class="siteDetails"><p><b>Исполнитель:</b> самозанятый Уманцев Владислав Юрьевич</p><p><b>ИНН:</b> 263623054557 · <b>Город деятельности:</b> Ставрополь</p><p><b>E-mail:</b> <a href="mailto:Umancev38@gmail.com">Umancev38@gmail.com</a> · <b>Телефон:</b> <a href="tel:+79614436862">+7 961 443-68-62</a></p></div>
+<p><a href="/legal.html#offer">Публичная оферта</a> · <a href="/legal.html#service">Условия услуги</a> · <a href="/legal.html#refund">Возврат и отказ</a> · <a href="/legal.html#privacy">Политика персональных данных</a> · <a href="/legal.html#contacts">Реквизиты</a>.</p></footer>
+<script>
+const ids=['market','price','cost','commission','logistics','ads','other','storage','packaging','returns','tax','quantity'];
+const PRODUCT_KEY_BASE='gde_pribyl_mp_products_v04', HISTORY_KEY_BASE='gde_pribyl_mp_history_v04';
+let storageScope='guest';
+let PRODUCT_KEY=PRODUCT_KEY_BASE, HISTORY_KEY=HISTORY_KEY_BASE;
+const DELETED_KEY_BASE='gde_pribyl_mp_deleted_v1';
+let DELETED_KEY=DELETED_KEY_BASE;
+const recordsPanel=document.querySelector('.records');recordsPanel.style.display='none';
+const BACKUP_VERSION=2;
+let currentPlan='free';
+const PLAN_LIMITS={free:{products:5,history:20},pro:{products:200,history:1000},business:{products:5000,history:10000}};
+const PLAN_RANK={free:0,pro:1,business:2};
+const hasPlan=plan=>PLAN_RANK[currentPlan]>=PLAN_RANK[plan];
+const readStore=key=>{try{return JSON.parse(localStorage.getItem(key)||'[]')}catch(e){return []}};
+const writeStore=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));return true}catch(e){alert('Не удалось сохранить данные. Проверь свободное место и настройки браузера.');return false}};
+const el=id=>document.getElementById(id);
+const num=id=>Math.max(0,Number(el(id).value)||0);
+const money=n=>n.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
+const show=n=>Number.isFinite(n)?money(n):'—';
+function calc(){
+ const raw=Object.fromEntries(ids.map(id=>[id,Number(el(id).value)]));
+ const p=raw.price,c=raw.cost,r=raw.commission/100,l=raw.logistics,a=raw.ads,o=raw.other,s=raw.storage,pack=raw.packaging,ret=raw.returns,t=raw.tax/100,q=raw.quantity;
+ const numericIds=ids.filter(id=>id!=='market');
+ const numericOk=numericIds.every(id=>el(id).value.trim()!==''&&Number.isFinite(raw[id])&&raw[id]>=0);
+ const valid=numericOk&&p>0&&raw.commission<=100&&raw.tax<=100&&r+t<1&&Number.isSafeInteger(q)&&q>=1;
+ const fee=p*r,tax=p*t,ops=l+a+o+s+pack+ret,expenses=c+fee+tax+ops,profit=p-expenses,margin=p?profit/p*100:0;
+ const denom=1-r-t,be=valid?(c+ops)/denom:NaN;
+ el('profit').textContent=valid?show(profit):'Проверь данные';el('profit').className='profit '+(valid&&profit>=0?'positive':'negative');
+ el('margin').textContent=valid?margin.toFixed(1).replace('.',',')+'%':'—';el('total').textContent=valid?show(profit*q):'—';el('expenses').textContent=valid?show(expenses*q):'—';el('expensePerUnit').textContent=valid?show(expenses):'—';el('breakeven').textContent=valid?show(be):'—';
+ el('feeValue').textContent=valid?show(fee):'—';el('taxValue').textContent=valid?show(tax):'—';el('costValue').textContent=valid?show(c):'—';el('opsValue').textContent=valid?show(ops):'—';
+ el('marketLabel').textContent=el('market').value+' · по введённым параметрам';
+ el('validation').textContent=valid?'Важно: предварительная модель. Тарифы WB подставляются только после загрузки официальных JSON-ответов API. Для Ozon пока используются введённые вручную ставки. Проверь актуальные удержания в кабинете продавца.':'Проверь данные: цена должна быть больше нуля; расходы не могут быть отрицательными; комиссия и налог должны быть от 0 до 100%, а вместе меньше 100%; количество продаж должно быть целым числом не меньше 1.';
+ return {market:el('market').value,price:p,cost:c,commission:raw.commission,logistics:l,ads:a,other:o,storage:s,packaging:pack,returns:ret,tax:raw.tax,quantity:q,profit,margin,total:profit*q,expenses,expensesPerUnit:expenses,expensesTotal:expenses*q,breakeven:be,valid};
+}
+function resetExample(){
+ for(const id of ids){
+  if(id==='market')continue;
+  const field=el(id);
+  if(field)field.value='';
+ }
+ calc();
+ el('reset').blur();
+}
+ids.forEach(id=>el(id).addEventListener('input',calc));
+el('reset').addEventListener('click',resetExample);
+function snapshot(){const x=calc();return {...x,values:Object.fromEntries(ids.map(id=>[id,el(id).value])),savedAt:new Date().toISOString()}}
+function legacyRecordId(item,namespace){
+ const input=namespace+':'+stableSerialize(item);let hash=0xcbf29ce484222325n;
+ for(let i=0;i<input.length;i++){hash^=BigInt(input.charCodeAt(i));hash=BigInt.asUintN(64,hash*0x100000001b3n)}
+ return 'legacy:'+hash.toString(16).padStart(16,'0');
+}
+function ensureRecordIds(key){
+ const rows=readStore(key);let changed=false;
+ rows.forEach(item=>{if(!item.id){item.id=legacyRecordId(item,key===PRODUCT_KEY?'products':'history');changed=true}});
+ if(changed)writeStore(key,rows);
+ return rows;
+}
+function addDeletedId(id){
+ const deleted=readStore(DELETED_KEY);if(!deleted.includes(id)){deleted.push(id);if(!writeStore(DELETED_KEY,deleted))return false}
+ return true;
+}
+function renderRecords(){
+ const products=ensureRecordIds(PRODUCT_KEY),history=ensureRecordIds(HISTORY_KEY);
+ const productRoot=el('productsList'),historyRoot=el('historyList');
+ productRoot.replaceChildren();historyRoot.replaceChildren();
+ if(!products.length)productRoot.innerHTML='<p class="empty">Пока нет сохранённых товаров.</p>';
+ products.forEach((item,i)=>{const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=item.name;const sub=document.createElement('small');sub.textContent=item.market+' · '+money(item.price);info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(PRODUCT_KEY);const removed=all[i];if(removed&&!addDeletedId(removed.id))return;all.splice(i,1);if(writeStore(PRODUCT_KEY,all)){renderRecords();renderBusinessDashboard()}});actions.append(load,del);node.append(info,actions);productRoot.append(node)});
+ if(!history.length)historyRoot.innerHTML='<p class="empty">Расчёты пока не сохранены.</p>';
+ history.slice().reverse().forEach((item,reverseIndex)=>{const actualIndex=history.length-1-reverseIndex;const node=document.createElement('div');node.className='record';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=money(item.profit)+' / шт.';const sub=document.createElement('small');sub.textContent=item.market+' · '+new Date(item.savedAt).toLocaleString('ru-RU');info.append(title,sub);const actions=document.createElement('div');actions.className='recordActions';const load=document.createElement('button');load.type='button';load.textContent='Загрузить';load.addEventListener('click',()=>{ids.forEach(id=>el(id).value=item.values[id]??'');calc();window.scrollTo({top:0,behavior:'smooth'})});const del=document.createElement('button');del.type='button';del.className='delete';del.textContent='Удалить';del.addEventListener('click',()=>{const all=readStore(HISTORY_KEY);const removed=all[actualIndex];if(removed&&!addDeletedId(removed.id))return;all.splice(actualIndex,1);if(writeStore(HISTORY_KEY,all))renderRecords()});actions.append(load,del);node.append(info,actions);historyRoot.append(node)});
+}
+el('saveProduct').addEventListener('click',()=>{if(readStore(PRODUCT_KEY).length>=(accountLimits?.products??PLAN_LIMITS[currentPlan].products)){alert('Лимит товаров тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const name=prompt('Название товара:');if(!name||!name.trim())return;const all=readStore(PRODUCT_KEY);all.push({...data,id:crypto.randomUUID(),name:name.trim()});if(writeStore(PRODUCT_KEY,all)){renderRecords();renderBusinessDashboard();el('saveProduct').textContent='Сохранено';setTimeout(()=>el('saveProduct').textContent='Сохранить товар',1400)}});
+el('saveCalc').addEventListener('click',()=>{if(readStore(HISTORY_KEY).length>=(accountLimits?.history??PLAN_LIMITS[currentPlan].history)){alert('Лимит истории тарифа '+currentPlan.toUpperCase()+' достигнут.');return}const data=snapshot();if(!data.valid){alert('Исправь параметры расчёта перед сохранением.');return}const all=readStore(HISTORY_KEY);all.push({...data,id:crypto.randomUUID()});if(writeStore(HISTORY_KEY,all)){renderRecords();el('saveCalc').textContent='Добавлено';setTimeout(()=>el('saveCalc').textContent='В историю',1400)}});
+el('exportData').addEventListener('click',()=>{
+ const backup={app:'Где прибыль МП',backupVersion:BACKUP_VERSION,createdAt:new Date().toISOString(),products:ensureRecordIds(PRODUCT_KEY),history:ensureRecordIds(HISTORY_KEY),deletedIds:readStore(DELETED_KEY)};
+ const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='gde-pribyl-mp-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);el('backupStatus').textContent='Резервная копия подготовлена. Проверь папку «Файлы» на iPhone.';
+});
+el('importData').addEventListener('change',async event=>{
+ const file=event.target.files?.[0];if(!file)return;
+ try{
+  if(file.size>1800000)throw new Error('Файл резервной копии больше 1,8 МБ.');
+  const raw=await file.text();
+  if(new TextEncoder().encode(raw).length>1800000)throw new Error('Размер резервной копии превышает 1,8 МБ.');
+  const data=JSON.parse(raw);
+  if(data.app!=='Где прибыль МП'||![1,BACKUP_VERSION].includes(data.backupVersion)||!Array.isArray(data.products)||!Array.isArray(data.history))throw new Error('Неверный формат резервной копии.');
+  const limits=accountLimits||PLAN_LIMITS[currentPlan];
+  if(data.products.length>limits.products||data.history.length>limits.history)throw new Error('Резервная копия превышает лимиты текущего тарифа. Данные не изменены.');
+  const importedDeletedIds=data.backupVersion>=2?data.deletedIds:[];
+  if(!Array.isArray(importedDeletedIds)||importedDeletedIds.length>50000||importedDeletedIds.some(id=>typeof id!=='string'||id.length<1||id.length>128))throw new Error('Список удалённых записей в резервной копии повреждён.');
+  const validRows=(arr,isProduct)=>arr.every(item=>{
+   if(!item||typeof item!=='object'||Array.isArray(item)||!item.values||typeof item.values!=='object'||Array.isArray(item.values)||typeof item.market!=='string')return false;
+   if(isProduct&&(typeof item.name!=='string'||!item.name.trim()))return false;
+   return ids.every(id=>Object.hasOwn(item.values,id)&&typeof item.values[id]==='string'&&item.values[id].length<=100);
+  });
+  if(!validRows(data.products,true)||!validRows(data.history,false))throw new Error('Файл повреждён или имеет неподдерживаемую структуру.');
+  if(!confirm('Восстановить резервную копию? Текущие товары и история будут заменены данными из файла.'))return;
+  const previousProducts=localStorage.getItem(PRODUCT_KEY),previousHistory=localStorage.getItem(HISTORY_KEY),previousDeleted=localStorage.getItem(DELETED_KEY);
+  try{
+   localStorage.setItem(PRODUCT_KEY,JSON.stringify(data.products));
+   localStorage.setItem(HISTORY_KEY,JSON.stringify(data.history));
+   localStorage.setItem(DELETED_KEY,JSON.stringify(importedDeletedIds));
+  }catch(storageError){
+   try{previousProducts===null?localStorage.removeItem(PRODUCT_KEY):localStorage.setItem(PRODUCT_KEY,previousProducts)}catch{}
+   try{previousHistory===null?localStorage.removeItem(HISTORY_KEY):localStorage.setItem(HISTORY_KEY,previousHistory)}catch{}
+   try{previousDeleted===null?localStorage.removeItem(DELETED_KEY):localStorage.setItem(DELETED_KEY,previousDeleted)}catch{}
+   throw new Error('Не удалось полностью восстановить данные. Предыдущие записи сохранены, если браузер разрешил откат.');
+  }
+  renderRecords();renderBusinessDashboard();
+  el('backupStatus').textContent='Данные успешно восстановлены. Для аккаунта нажми «Синхронизировать данные», чтобы отправить копию в облако.';
+ }catch(err){el('backupStatus').textContent='Ошибка: '+err.message;}
+ finally{event.target.value='';}
+});
+el('copy').addEventListener('click',async()=>{const x=calc();if(!x.valid){el('copy').textContent='Проверь данные';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600);return}const s=`Где прибыль МП — расчёт\nПлощадка: ${x.market}\nЦена: ${money(x.price)}\nЗакупка: ${money(x.cost)}\nКомиссия: ${x.commission}%\nЛогистика: ${money(x.logistics)}\nРеклама: ${money(x.ads)}\nПрочие расходы: ${money(x.other)}\nХранение: ${money(x.storage)}\nУпаковка и маркировка: ${money(x.packaging)}\nРезерв на возвраты и брак: ${money(x.returns)}\nНалог: ${x.tax}%\nПрибыль с единицы: ${money(x.profit)}\nМаржинальность: ${x.margin.toFixed(1)}%\nПродаж: ${x.quantity}\nПрибыль на объём: ${money(x.total)}`;try{await navigator.clipboard.writeText(s);el('copy').textContent='Скопировано!';setTimeout(()=>el('copy').textContent='Скопировать расчёт',1600)}catch(e){el('copy').textContent='Не удалось скопировать'}});
+
+// Импорт тарифов Wildberries из официальных JSON-ответов. Секретный API-ключ здесь не используется.
+const WB_COMMISSION_KEY_BASE='gde_pribyl_mp_wb_commissions_v1';
+const WB_BOX_KEY_BASE='gde_pribyl_mp_wb_box_rates_v1';
+let WB_COMMISSION_KEY=WB_COMMISSION_KEY_BASE, WB_BOX_KEY=WB_BOX_KEY_BASE;
+let wbCommissions=null, wbBoxRates=null;
+function setStorageScope(userId){
+ const next=userId===null||userId===undefined?'guest':'user_'+String(userId);
+ if(next===storageScope)return;
+ // Invalidate pending requests and clear the previous account's marketplace UI
+ // before loading the next profile, so stale snapshots are never shown in between.
+ marketplaceLoadGeneration++;
+ for(const [id,label] of [['connectWb','Подключить WB'],['connectOzon','Подключить Ozon'],['refreshWb','Обновить тарифы'],['refreshOzon','Обновить данные'],['disconnectWb','Отключить'],['disconnectOzon','Отключить']]){const button=el(id);if(button){button.disabled=false;button.textContent=label}}
+ marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;
+ renderMarketplaceState();
+ storageScope=next;
+ const suffix=storageScope==='guest'?'':'_'+storageScope;
+ PRODUCT_KEY=PRODUCT_KEY_BASE+suffix;HISTORY_KEY=HISTORY_KEY_BASE+suffix;DELETED_KEY=DELETED_KEY_BASE+suffix;
+ WB_COMMISSION_KEY=WB_COMMISSION_KEY_BASE+suffix;WB_BOX_KEY=WB_BOX_KEY_BASE+suffix;
+ wbCommissions=null;wbBoxRates=null;
+ try{
+  wbCommissions=JSON.parse(localStorage.getItem(WB_COMMISSION_KEY)||'null');
+  wbBoxRates=JSON.parse(localStorage.getItem(WB_BOX_KEY)||'null');
+  if(wbCommissions)refreshWBCategories();else{el('wbCategory').replaceChildren(new Option('Сначала загрузи комиссии',''));el('wbCategory').disabled=true}
+  if(wbBoxRates)refreshWBWarehouses();else{el('wbWarehouse').replaceChildren(new Option('Сначала загрузи тарифы',''));el('wbWarehouse').disabled=true}
+  updateWBApplyState();
+  setWBStatus(wbCommissions||wbBoxRates?'Загруженные тарифы WB относятся к этому профилю браузера. Проверь их актуальность перед применением.':'Для этого профиля ещё не загружены JSON-тарифы WB.',!wbCommissions&&!wbBoxRates);
+ }catch(error){setWBStatus('Сохранённые тарифы WB повреждены. Загрузи JSON-файлы заново.',true)}
+ renderRecords();renderBusinessDashboard();
+}
+const parseWBNumber=value=>{
+ if(value===null||value===undefined||value==='')return 0;
+ const n=Number(String(value).replace(/\s/g,'').replace(',','.').replace('%',''));
+ return Number.isFinite(n)?n:0;
+};
+const getWBReport=data=>Array.isArray(data)?data:(Array.isArray(data?.report)?data.report:(Array.isArray(data?.categories)?data.categories:[]));
+const getWBWarehouses=data=>data?.response?.data?.warehouseList||data?.data?.warehouseList||data?.warehouses||[];
+function setWBStatus(message,isWarn=true){
+ const node=el('wbTariffStatus');node.textContent=message;node.className='tariffStatus'+(isWarn?' warn':'');
+}
+function refreshWBCategories(){
+ const select=el('wbCategory');select.replaceChildren();
+ const rows=getWBReport(wbCommissions);
+ if(!rows.length){select.disabled=true;select.add(new Option('В файле не найдены комиссии',''));return}
+ const unique=new Map();
+ rows.forEach((row,index)=>{
+  const label=[row.parentName,row.subjectName].filter(Boolean).join(' / ')||('Категория '+(index+1));
+  const key=String(row.subjectID??row.parentID??index);
+  if(!unique.has(key))unique.set(key,{label,row});
+ });
+ [...unique.entries()].forEach(([key,item])=>select.add(new Option(item.label,key)));
+ select.disabled=false;
+}
+function refreshWBWarehouses(){
+ const select=el('wbWarehouse');select.replaceChildren();
+ const rows=getWBWarehouses(wbBoxRates);
+ if(!rows.length){select.disabled=true;select.add(new Option('В файле не найдены склады',''));return}
+ rows.forEach((row,index)=>select.add(new Option(row.warehouseName||('Склад '+(index+1)),String(index))));
+ select.disabled=false;
+}
+async function loadWBJson(inputId,kind){
+ if(!hasPlan('pro')){setWBStatus('Импорт тарифов Wildberries доступен в PRO и BUSINESS.',true);return}
+ const file=el(inputId).files?.[0];if(!file)return;
+ try{
+  const data=JSON.parse(await file.text());
+  if(kind==='commission'){
+   if(!getWBReport(data).length)throw new Error('Не найден массив report с комиссиями.');
+   wbCommissions=data;localStorage.setItem(WB_COMMISSION_KEY,JSON.stringify(data));refreshWBCategories();
+  }else{
+   if(!getWBWarehouses(data).length)throw new Error('Не найден response.data.warehouseList со складами.');
+   wbBoxRates=data;localStorage.setItem(WB_BOX_KEY,JSON.stringify(data));refreshWBWarehouses();
+  }
+  updateWBApplyState();
+  setWBStatus('Данные '+(kind==='commission'?'комиссий':'тарифов складов')+' загружены из файла «'+file.name+'». Проверь категорию, склад и схему продаж.',false);
+ }catch(error){setWBStatus('Не удалось прочитать файл: '+error.message,true)}
+ finally{el(inputId).value=''}
+}
+function hydrateWbApiSnapshot(snapshot){
+ if(!snapshot||!Array.isArray(snapshot.categories)||!Array.isArray(snapshot.warehouses))return;
+ wbCommissions={categories:snapshot.categories};wbBoxRates={warehouses:snapshot.warehouses};
+ refreshWBCategories();refreshWBWarehouses();updateWBApplyState();
+ setWBStatus('Тарифы получены напрямую через Wildberries API: '+snapshot.categories.length+' категорий и '+snapshot.warehouses.length+' складов. Выбери категорию и склад, затем подставь тарифы.',false);
+}
+function updateWBApplyState(){
+ el('applyWbTariffs').disabled=!(getWBReport(wbCommissions).length&&getWBWarehouses(wbBoxRates).length);
+}
+function applyWBTariffs(){
+ if(!hasPlan('pro')){setWBStatus('Импорт тарифов Wildberries доступен в PRO и BUSINESS.',true);return}
+ const rows=getWBReport(wbCommissions),warehouses=getWBWarehouses(wbBoxRates);
+ const chosen=rows.find(row=>String(row.subjectID??row.parentID)===el('wbCategory').value)||rows[0];
+ const warehouse=warehouses[Number(el('wbWarehouse').value)];
+ if(!chosen||!warehouse){setWBStatus('Выбери категорию и склад из загруженных данных.',true);return}
+ const scheme=el('wbScheme').value;
+ // WB fields: kgvpMarketplace — модель со склада WB (FBW), kgvpSupplier — со склада продавца (FBS).
+ const commission=parseWBNumber(scheme==='fbo'?chosen.kgvpMarketplace:chosen.kgvpSupplier);
+ const liters=Math.max(0.1,parseWBNumber(el('wbLiters').value));
+ const extraLiters=Math.max(0,liters-1);
+ const deliveryBase=parseWBNumber(scheme==='fbo'?warehouse.boxDeliveryBase:warehouse.boxDeliveryMarketplaceBase);
+ const deliveryLiter=parseWBNumber(scheme==='fbo'?warehouse.boxDeliveryLiter:warehouse.boxDeliveryMarketplaceLiter);
+ const storageBase=parseWBNumber(warehouse.boxStorageBase),storageLiter=parseWBNumber(warehouse.boxStorageLiter);
+ const storageDays=Math.max(0,Math.floor(parseWBNumber(el('wbStorageDays').value)));
+ const logistics=deliveryBase+extraLiters*deliveryLiter+parseWBNumber(el('wbReturnReserve').value);
+ const storage=(storageBase+extraLiters*storageLiter)*storageDays;
+ if(!(commission>0)){setWBStatus('Для выбранной категории не найдено значение комиссии '+(scheme==='fbo'?'kgvpMarketplace':'kgvpSupplier')+'. Выбери другую категорию или проверь выгрузку.',true);return}
+ el('commission').value=commission.toString();
+ el('logistics').value=logistics.toFixed(2);
+ el('storage').value=storage.toFixed(2);
+ calc();
+ const coefficient=scheme==='fbo'?warehouse.boxDeliveryCoefExpr:warehouse.boxDeliveryMarketplaceCoefExpr;
+ setWBStatus('Подставлено: комиссия '+commission+'%; склад «'+(warehouse.warehouseName||'без названия')+'»; доставка '+money(logistics)+'; хранение '+money(storage)+'. Объём '+liters+' л, хранение '+storageDays+' дн. Коэффициент WB '+(coefficient??'не указан')+'% уже учтён в тарифных ставках по документации API. Проверь остальные расходы и нажми «Сохранить товар», если нужно.',false);
+}
+el('commissionFile').addEventListener('change',()=>loadWBJson('commissionFile','commission'));
+el('boxFile').addEventListener('change',()=>loadWBJson('boxFile','box'));
+el('wbCategory').addEventListener('change',updateWBApplyState);
+el('wbWarehouse').addEventListener('change',updateWBApplyState);
+el('applyWbTariffs').addEventListener('click',applyWBTariffs);
+el('clearWbTariffs').addEventListener('click',()=>{
+ wbCommissions=null;wbBoxRates=null;
+ localStorage.removeItem(WB_COMMISSION_KEY);localStorage.removeItem(WB_BOX_KEY);
+ el('wbCategory').replaceChildren(new Option('Сначала загрузи комиссии',''));el('wbCategory').disabled=true;
+ el('wbWarehouse').replaceChildren(new Option('Сначала загрузи тарифы',''));el('wbWarehouse').disabled=true;
+ updateWBApplyState();setWBStatus('Загруженные данные WB удалены. Текущие поля калькулятора не изменены.',true);
+});
+try{
+ wbCommissions=JSON.parse(localStorage.getItem(WB_COMMISSION_KEY)||'null');
+ wbBoxRates=JSON.parse(localStorage.getItem(WB_BOX_KEY)||'null');
+ if(wbCommissions)refreshWBCategories();if(wbBoxRates)refreshWBWarehouses();
+ updateWBApplyState();
+ if(wbCommissions||wbBoxRates)setWBStatus('Найдены ранее загруженные данные WB на этом устройстве. Для применения проверь категорию, склад и параметры товара.',false);
+}catch(e){setWBStatus('Сохранённые данные тарифов повреждены. Загрузи JSON-файлы заново.',true)}
+
+calc();renderRecords();
+
+
+function updateTargetPrice(){
+ const target=Number(el('targetMargin').value),data=calc();
+ if(!hasPlan('pro'))return;
+ if(!data.valid||!Number.isFinite(target)||target<0||target>90){el('targetPriceResult').textContent='Проверь параметры';el('targetPriceHint').textContent='Цель должна быть от 0 до 90%';return}
+ const denominator=1-data.commission/100-data.tax/100-target/100;
+ if(denominator<=0){el('targetPriceResult').textContent='Невозможно рассчитать';el('targetPriceHint').textContent='Комиссия, налог и маржа должны быть меньше 100%';return}
+ const fixed=data.cost+data.logistics+data.ads+data.other+data.storage+data.packaging+data.returns;
+ el('targetPriceResult').textContent=money(fixed/denominator);
+ el('targetPriceHint').textContent='Цена для целевой маржи '+target.toLocaleString('ru-RU')+'% при текущих расходах.';
+}
+function renderBusinessDashboard(){
+ if(!hasPlan('business'))return;
+ const products=readStore(PRODUCT_KEY);
+ const revenue=products.reduce((sum,x)=>sum+(Number(x.price)||0)*(Number(x.quantity)||0),0);
+ const profit=products.reduce((sum,x)=>sum+(Number(x.total)||0),0);
+ el('portfolioCount').textContent=String(products.length);
+ el('portfolioProfit').textContent=money(profit);
+ el('portfolioRevenue').textContent=money(revenue);
+ el('portfolioMargin').textContent=revenue>0?(profit/revenue*100).toFixed(1).replace('.',',')+'%':'—';
+ const sorted=products.slice().sort((a,b)=>(Number(b.total)||0)-(Number(a.total)||0));
+ const root=el('portfolioRanking');root.replaceChildren();
+ const top=sorted.slice(0,5);
+ if(!top.length){root.textContent='Сохрани товары, чтобы увидеть рейтинг.'}
+ else top.forEach((item,index)=>{const row=document.createElement('div');row.className='record';const name=document.createElement('strong');name.textContent=(index+1)+'. '+String(item.name||'Без названия');const value=document.createElement('b');value.textContent=money(Number(item.total)||0);row.append(name,value);root.append(row)});
+ const comparison=el('portfolioComparison');comparison.replaceChildren();
+ if(!sorted.length){comparison.textContent='Пока нечего сравнивать.'}
+ else{
+  const table=document.createElement('table');table.className='portfolioTable';
+  const head=document.createElement('thead'),headRow=document.createElement('tr');
+  ['Товар','Площадка','Прибыль / шт.','Маржа','Продаж','Прибыль всего'].forEach(label=>{const th=document.createElement('th');th.textContent=label;headRow.append(th)});
+  head.append(headRow);table.append(head);
+  const body=document.createElement('tbody');
+  sorted.forEach(item=>{
+   const row=document.createElement('tr');
+   const values=[String(item.name||'Без названия'),String(item.market||'—'),money(Number(item.profit)||0),Number.isFinite(Number(item.margin))?Number(item.margin).toFixed(1).replace('.',',')+'%':'—',String(Number(item.quantity)||0),money(Number(item.total)||0)];
+   values.forEach(value=>{const td=document.createElement('td');td.textContent=value;row.append(td)});
+   body.append(row);
+  });
+  table.append(body);comparison.append(table);
+ }
+ const insights=el('portfolioInsights');insights.replaceChildren();
+ const loss=products.filter(item=>(Number(item.profit)||0)<0);
+ const thin=products.filter(item=>(Number(item.profit)||0)>=0&&Number.isFinite(Number(item.margin))&&Number(item.margin)<15);
+ const addInsight=(title,description,warn=true)=>{
+  const node=document.createElement('div');node.className='insightItem '+(warn?'warn':'good');
+  const strong=document.createElement('strong');strong.textContent=title;
+  const text=document.createElement('span');text.textContent=description;
+  node.append(strong,text);insights.append(node);
+ };
+ if(loss.length){
+  addInsight('Убыточные товары: '+loss.length,'Проверь закупочную цену, комиссию, логистику, рекламу, хранение и налог. В первую очередь: '+loss.slice(0,5).map(x=>String(x.name||'Без названия')+' ('+money(Number(x.profit)||0)+' / шт.)').join('; ')+'.');
+ }
+ if(thin.length){
+  addInsight('Низкая маржинальность: '+thin.length,'У этих товаров маржа ниже 15%. Проверь возможность изменить цену, снизить расходы или пересмотреть рекламные затраты: '+thin.slice(0,5).map(x=>String(x.name||'Без названия')+' ('+Number(x.margin).toFixed(1).replace('.',',')+'%)').join('; ')+'.');
+ }
+ if(!loss.length&&!thin.length){
+  addInsight('Критичных отклонений не найдено','По сохранённым расчётам нет товаров с отрицательной прибылью или маржой ниже 15%. Обновляй исходные тарифы и расходы перед принятием решений.',false);
+ }
+}
+function updatePlanUI(){
+ const pro=hasPlan('pro'),business=hasPlan('business');
+ el('targetPriceLockNotice').hidden=pro;el('targetPriceContent').hidden=!pro;
+ el('businessLockNotice').hidden=business;el('businessContent').hidden=!business;
+ if(pro)updateTargetPrice();
+ renderBusinessDashboard();
+}
+function exportPortfolioCsv(){
+ if(!hasPlan('business'))return;
+ const quote=x=>{let value=String(x??'');if(typeof x==='string'&&/^[\s]*[=+\-@]/.test(value))value="'"+value;return '"'+value.replace(/"/g,'""')+'"'};
+ const rows=[['Товар','Площадка','Цена','Прибыль за единицу','Маржинальность','Количество','Расчётная прибыль'],...readStore(PRODUCT_KEY).map(x=>[x.name,x.market,x.price,x.profit,x.margin,x.quantity,x.total])];
+ const csv='\ufeff'+rows.map(row=>row.map(quote).join(';')).join('\r\n');
+ const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');
+ link.href=url;link.download='gde-pribyl-assortment.csv';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+el('targetMargin').addEventListener('input',updateTargetPrice);
+el('exportPortfolioCsv').addEventListener('click',exportPortfolioCsv);
+
+const API_URL=location.hostname==='gde-pribyl-mp.onrender.com'?'https://gde-pribyl-mp-api.onrender.com':'';
+const paymentStatus=el('paymentStatus');
+const accountStatus=el('accountStatus');
+let accountUser=null, accountLimits=PLAN_LIMITS.free, accountExpiry=null;
+let paymentsReady=false,paymentConfigMessage='Проверяем настройки Robokassa…',subscriptionMessage='';
+async function apiRequest(path,options={}){
+ const headers={...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})};
+ const response=await fetch(API_URL+path,{...options,headers,credentials:'include',cache:'no-store'});
+ let data={};try{data=await response.json()}catch{}
+ if(!response.ok){const error=new Error(data.error||'Ошибка запроса ('+response.status+').');error.status=response.status;error.code=data.code;throw error;}
+ return data;
+}
+function setAccountStatus(message,warn=false){
+ accountStatus.textContent=message;accountStatus.className='accountStatus'+(warn?' warn':'');
+}
+function updateAuthUI(){
+ const signedIn=Boolean(accountUser);
+ renderMarketplaceState();
+ el('logoutAccount').hidden=!signedIn;
+ el('syncAccount').hidden=!signedIn;
+ const needsPhone=!signedIn||!accountUser?.phone;
+ el('smsPhoneLabel').textContent=signedIn?'Привязать номер телефона к аккаунту':'Вход и регистрация по СМС';
+ el('smsPhone').disabled=!needsPhone;
+ el('smsCode').disabled=!needsPhone;
+ el('requestSmsCode').hidden=!needsPhone;
+ el('verifySmsCode').hidden=!needsPhone;
+ el('requestSmsCode').textContent=signedIn?'Отправить код для привязки':'Получить код по СМС';
+ el('verifySmsCode').textContent=signedIn?'Подтвердить и привязать номер':'Подтвердить код и продолжить';
+ el('accountMeta').textContent=signedIn
+  ?'Выполнен вход: '+(accountUser.phone||'аккаунт')+'. Тариф: '+currentPlan.toUpperCase()+(accountExpiry?' · действует до '+new Date(accountExpiry).toLocaleDateString('ru-RU'):'')
+  :'Не выполнен вход. Регистрация, вход и восстановление доступа доступны по СМС.';
+ document.querySelectorAll('[data-pay-plan]').forEach(button=>{button.disabled=!signedIn||!paymentsReady;button.title=!signedIn?'Сначала войди по СМС.':!paymentsReady?paymentConfigMessage:'Оформить подписку'});
+ paymentStatus.textContent=!paymentsReady?paymentConfigMessage:!signedIn?'Войди по СМС, чтобы оформить подписку.':(subscriptionMessage||'Можно оформить подписку.');
+}
+async function checkPaymentConfig(){
+ try{
+  const health=await apiRequest('/health');
+  const pro=health.planSummary?.pro,business=health.planSummary?.business;
+  const pricesMatch=Number(pro?.amount)===499&&Number(business?.amount)===900&&Number(pro?.days)===30&&Number(business?.days)===30;
+  paymentsReady=health.paymentsConfigured===true&&health.testMode!==true&&pricesMatch;
+  paymentConfigMessage=health.paymentsConfigured!==true
+   ?'Реальная оплата временно отключена: Robokassa ещё не полностью настроена на сервере.'
+   :health.testMode===true
+    ?'Robokassa работает в тестовом режиме. Реальные платежи пока отключены.'
+    :!pricesMatch
+     ?'Оплата отключена: серверные цены или сроки тарифов не совпадают с опубликованными условиями.'
+     :'';
+ }catch(error){
+  paymentsReady=false;paymentConfigMessage='Не удалось проверить настройки Robokassa. Оплата временно отключена.';
+ }
+ updateAuthUI();
+}
+async function refreshSubscription(){
+ try{
+  const data=await apiRequest('/api/auth/me');
+  accountUser=data.user;currentPlan=['free','pro','business'].includes(data.plan)?data.plan:'free';
+  accountLimits=data.limits||PLAN_LIMITS[currentPlan];accountExpiry=data.expiresAt||null;
+  subscriptionMessage=data.plan==='free'?'Активен тариф FREE.':'Активна подписка '+currentPlan.toUpperCase()+'. Действует до '+new Date(accountExpiry).toLocaleString('ru-RU')+'.';
+ }catch(error){
+  accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;
+  if(/Войди в аккаунт|Сессия завершена/i.test(error.message))setAccountStatus('Войди или создай аккаунт. Локальные данные не затронуты.');
+  else setAccountStatus('Сервер аккаунтов временно недоступен: '+error.message,true);
+  subscriptionMessage='Для оформления подписки войди в аккаунт.';
+ }
+ setStorageScope(accountUser?.id??null);
+ recordsPanel.style.display='';renderRecords();
+ updateAuthUI();updatePlanUI();loadMarketplaceConnections();
+}
+async function authenticateBySms(mode){
+ const phone=el('smsPhone').value.trim();
+ const code=el('smsCode').value.trim();
+ const button=el(mode==='request'?'requestSmsCode':'verifySmsCode');
+ button.disabled=true;
+ try{
+  if(mode==='request'){
+   const data=await apiRequest(accountUser?'/api/auth/sms/link/request':'/api/auth/sms/request',{method:'POST',body:JSON.stringify({phone})});
+   setAccountStatus(data.message||'Запрос на отправку кода принят.');
+  }else{
+   const data=await apiRequest(accountUser?'/api/auth/sms/link/verify':'/api/auth/sms/verify',{method:'POST',body:JSON.stringify({phone,code})});
+   el('smsCode').value='';
+   accountUser=data.user;currentPlan=data.plan||'free';accountLimits=data.limits||PLAN_LIMITS[currentPlan]||PLAN_LIMITS.free;accountExpiry=data.expiresAt||null;
+   setAccountStatus('Номер подтверждён. Вход выполнен.');
+   await refreshSubscription();
+  }
+ }catch(error){setAccountStatus(error.message,true)}
+ finally{button.disabled=false}
+}
+el('requestSmsCode').addEventListener('click',()=>authenticateBySms('request'));
+el('verifySmsCode').addEventListener('click',()=>authenticateBySms('verify'));
+el('logoutAccount').addEventListener('click',async()=>{
+ el('logoutAccount').disabled=true;
+ try{await apiRequest('/api/auth/logout',{method:'POST',body:'{}'});accountUser=null;currentPlan='free';accountLimits=PLAN_LIMITS.free;accountExpiry=null;setStorageScope(null);renderRecords();loadMarketplaceConnections();updateAuthUI();updatePlanUI();setAccountStatus('Вы вышли из аккаунта. Локальные данные этого профиля сохранены отдельно.');paymentStatus.textContent='Для оформления подписки войди в аккаунт.'}
+ catch(error){setAccountStatus(error.message,true)}
+ finally{el('logoutAccount').disabled=false}
+});
+function stableSerialize(value){
+ if(Array.isArray(value))return '['+value.map(stableSerialize).join(',')+']';
+ if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+stableSerialize(value[key])).join(',')+'}';
+ return JSON.stringify(value);
+}
+function mergeUnique(localRows,cloudRows){
+ const map=new Map();
+ [...cloudRows,...localRows].forEach(item=>{
+  const key=item&&typeof item.id==='string'?'id:'+item.id:'legacy:'+stableSerialize(item);
+  if(!map.has(key))map.set(key,item);
+ });
+ return [...map.values()];
+}
+async function syncAccount(){
+ if(!accountUser)return setAccountStatus('Сначала войди в аккаунт.',true);
+ const syncUserId=String(accountUser.id),syncScope=storageScope;
+ const ensureCurrentAccount=()=>{
+  if(String(accountUser?.id??'')!==syncUserId||storageScope!==syncScope)throw new Error('Аккаунт изменился во время синхронизации. Запусти синхронизацию повторно.');
+ };
+ const button=el('syncAccount');button.disabled=true;button.textContent='Синхронизация…';
+ try{
+  let cloud=await apiRequest('/api/account/data');
+  ensureCurrentAccount();
+  let products,history,saved,deletedIds;
+  for(let attempt=0;attempt<3;attempt++){
+   ensureCurrentAccount();
+   deletedIds=[...new Set([...readStore(DELETED_KEY),...(cloud.deletedIds||[])])];
+   const deletedSet=new Set(deletedIds);
+   products=mergeUnique(ensureRecordIds(PRODUCT_KEY),cloud.products||[]).filter(item=>!deletedSet.has(item.id));
+   history=mergeUnique(ensureRecordIds(HISTORY_KEY),cloud.history||[]).filter(item=>!deletedSet.has(item.id));
+   if(products.length>accountLimits.products||history.length>accountLimits.history){
+    throw new Error('После объединения получится '+products.length+' товаров и '+history.length+' расчётов. Лимиты тарифа: '+accountLimits.products+' и '+accountLimits.history+'. Данные не изменены.');
+   }
+   try{
+    saved=await apiRequest('/api/account/data',{method:'PUT',body:JSON.stringify({products,history,deletedIds,expectedVersion:cloud.version})});
+    ensureCurrentAccount();
+    break;
+   }catch(error){
+    if(error.status!==409||attempt===2)throw error;
+    cloud=await apiRequest('/api/account/data');
+    ensureCurrentAccount();
+   }
+  }
+  if(!saved)throw new Error('Данные часто меняются на другом устройстве. Повтори синхронизацию через несколько секунд.');
+  ensureCurrentAccount();
+  if(!writeStore(PRODUCT_KEY,products)||!writeStore(HISTORY_KEY,history)||!writeStore(DELETED_KEY,deletedIds))throw new Error('Облако сохранено, но локальное хранилище не обновилось. Перезагрузи страницу и повтори синхронизацию.');
+  renderRecords();renderBusinessDashboard();
+  setAccountStatus('Синхронизация завершена. Товаров: '+saved.productCount+', расчётов: '+saved.historyCount+', удалений синхронизировано: '+deletedIds.length+'. Версия облака: '+saved.version+'.');
+ }catch(error){
+  if(String(accountUser?.id??'')===syncUserId&&storageScope===syncScope)setAccountStatus(error.message,true);
+ }
+ finally{button.disabled=false;button.textContent='Синхронизировать данные'}
+}
+el('syncAccount').addEventListener('click',syncAccount);
+
+const marketplaceState={wildberries:null,ozon:null};
+let marketplaceLoadGeneration=0;
+function captureMarketplaceContext(){return {generation:marketplaceLoadGeneration,userId:accountUser?.id??null,scope:storageScope}}
+function isMarketplaceContextCurrent(context){return context.generation===marketplaceLoadGeneration&&String(accountUser?.id??'')===String(context.userId??'')&&storageScope===context.scope}
+let ozonDemoActive=false;
+const ozonDemoSnapshot={
+ fetchedAt:'DEMO',
+ products:3,
+ items:[
+  {productId:'900000001',offerId:'DEMO-MUG-01',price:1490,acquiring:18.4,commissions:{salesPercentFbo:15,salesPercentFbs:18,fboDeliveryToCustomer:85,fboDirectFlowMin:31,fboDirectFlowMax:46.5,fboReturn:40,fbsFirstMileMin:35,fbsFirstMileMax:55,fbsDirectFlowMin:41,fbsDirectFlowMax:61.5,fbsDeliveryToCustomer:60,fbsReturn:40}},
+  {productId:'900000002',offerId:'DEMO-LAMP-02',price:3290,acquiring:25.2,commissions:{salesPercentFbo:12.5,salesPercentFbs:16,fboDeliveryToCustomer:110,fboDirectFlowMin:42,fboDirectFlowMax:58,fboReturn:55,fbsFirstMileMin:45,fbsFirstMileMax:70,fbsDirectFlowMin:52,fbsDirectFlowMax:72,fbsDeliveryToCustomer:80,fbsReturn:55}},
+  {productId:'900000003',offerId:'DEMO-CASE-03',price:790,acquiring:9.8,commissions:{salesPercentFbo:17,salesPercentFbs:20,fboDeliveryToCustomer:65,fboDirectFlowMin:24,fboDirectFlowMax:34,fboReturn:30,fbsFirstMileMin:25,fbsFirstMileMax:40,fbsDirectFlowMin:31,fbsDirectFlowMax:44,fbsDeliveryToCustomer:50,fbsReturn:30}}
+ ]
+};
+function getOzonItems(){return (ozonDemoActive?ozonDemoSnapshot:marketplaceState.ozon?.snapshot)?.items||[]}
+function marketplaceLabel(provider){return provider==='wildberries'?'Wildberries':'Ozon'}
+function marketplaceSnapshotLabel(provider,snapshot){
+ if(!snapshot)return 'Подключён. Данные ещё не обновлялись.';
+ if(provider==='wildberries')return 'Подключён · категорий: '+(snapshot.categories?.length||0)+', складов: '+(snapshot.warehouses?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
+ return 'Подключён · товаров в каталоге: '+(snapshot.products||0)+', строк с комиссиями: '+(snapshot.items?.length||0)+'. Обновлено: '+new Date(snapshot.fetchedAt).toLocaleString('ru-RU');
+}
+function refreshOzonProductOptions(){
+ const items=getOzonItems();
+ const query=el('ozonProductSearch').value.trim().toLocaleLowerCase('ru-RU');
+ const matches=items.filter(item=>{
+  const text=[item.offerId,item.productId].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
+  return !query||text.includes(query);
+ }).slice(0,100);
+ const select=el('ozonProductSelect');
+ select.replaceChildren();
+ if(!matches.length){
+  select.add(new Option(items.length?'Совпадений не найдено':'Каталог Ozon ещё не загружен',''));
+  select.disabled=true;
+ }else{
+  matches.forEach(item=>select.add(new Option((item.offerId||'Без артикула')+' · ID '+item.productId,String(item.productId))));
+  select.disabled=false;
+ }
+ el('applyOzonCommission').disabled=ozonDemoActive||!matches.some(item=>item.commissions);
+ if(ozonDemoActive)el('ozonApplyStatus').textContent='Демо-режим: данные синтетические, применение к калькулятору отключено.';
+ if(items.length>100&&matches.length===100)el('ozonApplyStatus').textContent='Показаны первые 100 совпадений. Уточни поиск, чтобы найти нужный товар.';
+}
+function applyOzonCommission(){
+ if(ozonDemoActive){el('ozonApplyStatus').textContent='Это демонстрационные данные. Калькулятор не изменён. Для переноса комиссии подключи свой Ozon API.';return}
+ const productId=el('ozonProductSelect').value;
+ const item=getOzonItems().find(row=>String(row.productId)===productId);
+ if(!item){el('ozonApplyStatus').textContent='Выбери товар из загруженного каталога.';return}
+ const scheme=el('ozonScheme').value;
+ const raw=scheme==='fbo'?item.commissions?.salesPercentFbo:item.commissions?.salesPercentFbs;
+ const rate=raw===null||raw===undefined?NaN:Number(raw);
+ if(!Number.isFinite(rate)||rate<0||rate>100){
+  el('ozonApplyStatus').textContent='Для выбранного товара нет корректной комиссии '+scheme.toUpperCase()+'. Значение не подставлено.';
+  return;
+ }
+ el('market').value='Ozon';
+ el('commission').value=String(rate);
+ calc();
+ el('ozonApplyStatus').textContent='Подставлена комиссия '+rate+'% для '+(item.offerId||('товара '+item.productId))+' ('+scheme.toUpperCase()+'). Логистика, хранение и возвраты не изменены.';
+}
+function renderOzonSnapshot(snapshot){
+ const node=el('ozonTariffDetails');
+ if(!snapshot?.items?.length){node.textContent=snapshot?.note||'';refreshOzonProductOptions();return}
+ node.textContent='Примеры полученных данных (первые 8 товаров):\\n'+snapshot.items.slice(0,8).map(item=>{
+  const c=item.commissions||{};
+  return (item.offerId||item.productId)+' · комиссия FBO/FBS '+(c.salesPercentFbo??'—')+'/'+(c.salesPercentFbs??'—')+'% · эквайринг '+(item.acquiring??'—')+' ₽ · FBO доставка/транзит мин–макс/возврат '+(c.fboDeliveryToCustomer??'—')+'/'+(c.fboDirectFlowMin??'—')+'–'+(c.fboDirectFlowMax??'—')+'/'+(c.fboReturn??'—')+' ₽ · FBS первая миля мин–макс/транзит мин–макс/доставка/возврат '+(c.fbsFirstMileMin??'—')+'–'+(c.fbsFirstMileMax??'—')+'/'+(c.fbsDirectFlowMin??'—')+'–'+(c.fbsDirectFlowMax??'—')+'/'+(c.fbsDeliveryToCustomer??'—')+'/'+(c.fbsReturn??'—')+' ₽';
+ }).join('\\n');
+ refreshOzonProductOptions();
+}
+function renderMarketplaceState(){
+ const allowed=Boolean(accountUser)&&hasPlan('pro');
+ el('marketplacePanel').hidden=!allowed;
+ for(const provider of ['wildberries','ozon']){
+  const prefix=provider==='wildberries'?'Wb':'Ozon';
+  const state=marketplaceState[provider];
+  if(provider==='ozon')renderOzonSnapshot(ozonDemoActive?ozonDemoSnapshot:state?.snapshot);
+  el('refresh'+prefix).hidden=!state?.connected;
+  el('disconnect'+prefix).hidden=!state?.connected;
+  const statusNode=el(provider==='wildberries'?'wbConnectionStatus':'ozonConnectionStatus');
+  statusNode.textContent=provider==='ozon'&&ozonDemoActive
+   ?'ДЕМО-РЕЖИМ: показаны синтетические данные. Ozon API не подключён, ключи не вводились и не сохранялись.'
+   :state?.connected?marketplaceSnapshotLabel(provider,state.snapshot):state?.lastError||'Не подключён.';
+  if(provider==='ozon'){
+   el('showOzonDemo').hidden=Boolean(state?.connected)||ozonDemoActive;
+   el('exitOzonDemo').hidden=!ozonDemoActive;
+  }
+ }
+ el('marketplaceSummary').textContent=allowed
+  ?'Ключи не отображаются после сохранения. Для смены ключа введи новый и нажми «Подключить».'
+  :'Подключение доступно после входа на тарифе PRO или BUSINESS.';
+}
+async function loadMarketplaceConnections(){
+ const generation=++marketplaceLoadGeneration;
+ const requestedUserId=accountUser?.id??null;
+ if(!accountUser||!hasPlan('pro')){marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;renderMarketplaceState();return}
+ try{
+  const data=await apiRequest('/api/marketplaces');
+  if(generation!==marketplaceLoadGeneration||accountUser?.id!==requestedUserId)return;
+  marketplaceState.wildberries=data.connections?.wildberries||null;
+  marketplaceState.ozon=data.connections?.ozon||null;
+  if(marketplaceState.wildberries?.snapshot)hydrateWbApiSnapshot(marketplaceState.wildberries.snapshot);
+  renderMarketplaceState();
+ }catch(error){
+  if(generation!==marketplaceLoadGeneration||accountUser?.id!==requestedUserId)return;
+  marketplaceState.wildberries=null;marketplaceState.ozon=null;ozonDemoActive=false;
+  el('marketplaceSummary').textContent=error.message;
+  renderMarketplaceState();
+ }
+}
+async function connectMarketplace(provider){
+ const context=captureMarketplaceContext();
+ const isWb=provider==='wildberries';
+ const button=el(isWb?'connectWb':'connectOzon');
+ const body=isWb?{token:el('wbApiToken').value.trim()}:{clientId:el('ozonClientId').value.trim(),apiKey:el('ozonApiKey').value.trim()};
+ if(isWb?!body.token:(!body.clientId||!body.apiKey)){el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent='Заполни все поля ключей.';return}
+ button.disabled=true;button.textContent='Проверяем ключ…';
+ try{
+  const data=await apiRequest('/api/marketplaces/'+provider+'/credentials',{method:'PUT',body:JSON.stringify(body)});
+  if(!isMarketplaceContextCurrent(context))return;
+  marketplaceState[provider]={connected:true,snapshot:data.snapshot};
+  if(isWb){el('wbApiToken').value='';hydrateWbApiSnapshot(data.snapshot)}else{ozonDemoActive=false;el('ozonClientId').value='';el('ozonApiKey').value=''}
+  renderMarketplaceState();
+ }catch(error){if(isMarketplaceContextCurrent(context))el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
+ finally{if(isMarketplaceContextCurrent(context)){button.disabled=false;button.textContent=isWb?'Подключить WB':'Подключить Ozon'}}
+}
+async function refreshMarketplace(provider){
+ const context=captureMarketplaceContext();
+ const isWb=provider==='wildberries',button=el(isWb?'refreshWb':'refreshOzon');
+ button.disabled=true;button.textContent='Обновляем…';
+ try{
+  const data=await apiRequest('/api/marketplaces/'+provider+'/refresh',{method:'POST',body:'{}'});
+  if(!isMarketplaceContextCurrent(context))return;
+  marketplaceState[provider]={connected:true,snapshot:data.snapshot};if(isWb)hydrateWbApiSnapshot(data.snapshot);else ozonDemoActive=false;renderMarketplaceState();
+ }catch(error){if(isMarketplaceContextCurrent(context))el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
+ finally{if(isMarketplaceContextCurrent(context)){button.disabled=false;button.textContent=isWb?'Обновить тарифы':'Обновить данные'}}
+}
+async function disconnectMarketplace(provider){
+ const context=captureMarketplaceContext();
+ const isWb=provider==='wildberries',button=el(isWb?'disconnectWb':'disconnectOzon');
+ button.disabled=true;
+ try{
+  await apiRequest('/api/marketplaces/'+provider,{method:'DELETE',body:'{}'});
+  if(!isMarketplaceContextCurrent(context))return;
+  marketplaceState[provider]=null;if(!isWb)ozonDemoActive=false;renderMarketplaceState();
+  el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent='Подключение отключено. Ключ удалён с сервера.';
+ }catch(error){if(isMarketplaceContextCurrent(context))el(isWb?'wbConnectionStatus':'ozonConnectionStatus').textContent=error.message}
+ finally{if(isMarketplaceContextCurrent(context))button.disabled=false}
+}
+el('connectWb').addEventListener('click',()=>connectMarketplace('wildberries'));
+el('connectOzon').addEventListener('click',()=>connectMarketplace('ozon'));
+el('ozonProductSearch').addEventListener('input',refreshOzonProductOptions);
+el('applyOzonCommission').addEventListener('click',applyOzonCommission);
+el('showOzonDemo').addEventListener('click',()=>{ozonDemoActive=true;el('ozonProductSearch').value='';renderMarketplaceState()});
+el('exitOzonDemo').addEventListener('click',()=>{ozonDemoActive=false;el('ozonProductSearch').value='';renderMarketplaceState()});
+el('refreshWb').addEventListener('click',()=>refreshMarketplace('wildberries'));
+el('refreshOzon').addEventListener('click',()=>refreshMarketplace('ozon'));
+el('disconnectWb').addEventListener('click',()=>disconnectMarketplace('wildberries'));
+el('disconnectOzon').addEventListener('click',()=>disconnectMarketplace('ozon'));
+
+async function startPayment(planCode,button){
+ const original=button.textContent;button.disabled=true;button.textContent='Создаём платёж…';
+ try{
+  if(!accountUser)throw new Error('Сначала войди в аккаунт.');
+  if(!paymentsReady)throw new Error(paymentConfigMessage);
+  if(!el('paymentConsent').checked)throw new Error('Перед оплатой ознакомься с офертой и политикой и отметь согласие.');
+  const data=await apiRequest('/api/payments/create',{method:'POST',body:JSON.stringify({plan:planCode})});
+  if(!data.paymentUrl||!data.paymentParams)throw new Error('Параметры платежа не получены.');
+  const form=document.createElement('form');form.method='POST';form.action=data.paymentUrl;
+  Object.entries(data.paymentParams).forEach(([key,value])=>{
+   const field=document.createElement('input');field.type='hidden';field.name=key;field.value=String(value);form.appendChild(field);
+  });
+  document.body.appendChild(form);form.submit();
+ }catch(error){paymentStatus.textContent=error.message;button.disabled=false;button.textContent=original}
+}
+document.querySelectorAll('[data-pay-plan]').forEach(button=>button.addEventListener('click',()=>startPayment(button.dataset.payPlan,button)));
+const paymentReturn=new URLSearchParams(location.search).get('payment');
+if(paymentReturn==='failed')paymentStatus.textContent='Платёж не завершён. Подписка не активирована.';
+else if(paymentReturn==='return')paymentStatus.textContent='Проверяем подтверждение платежа от Robokassa…';
+checkPaymentConfig();
+refreshSubscription();
+if(paymentReturn==='return'){
+ let attempts=0;
+ const poll=setInterval(async()=>{
+  attempts++;await refreshSubscription();
+  if(paymentStatus.textContent.startsWith('Активна подписка')||attempts>=8)clearInterval(poll);
+ },2500);
+}
+// iPhone: страница остаётся обычным сайтом; добавление на экран «Домой» даёт быстрый запуск, но не синхронизирует данные между устройствами.
+</script>
+</body>
+</html>
