@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-const blueprint = await readFile(new URL("../render.yaml", import.meta.url), "utf8");
 
 test("mobile browsers receive a device-width viewport", () => {
   assert.match(html, /<meta name="viewport" content="width=device-width,initial-scale=1">/);
@@ -20,10 +19,8 @@ test("narrow screens use a single-column calculator and avoid horizontal page ov
   assert.match(html, /\.portfolioTableWrap\{max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch\}/);
 });
 
-test("same-origin API paths are routed to the backend by Render", () => {
-  assert.match(html, /const API_URL=''/);
-  assert.match(blueprint, /source: \/api\/\*/);
-  assert.match(blueprint, /destination: https:\/\/gde-pribyl-mp-api\.onrender\.com\/api\/\*/);
-  assert.match(blueprint, /source: \/health/);
-  assert.match(blueprint, /destination: https:\/\/gde-pribyl-mp-api\.onrender\.com\/health/);
+test("API requests target the deployed backend and include session cookies", () => {
+  assert.match(html, /const API_URL='https:\/\/gde-pribyl-mp-api\.onrender\.com';/);
+  assert.match(html, /credentials:'include'/);
+  assert.match(html, /cache:'no-store'/);
 });
