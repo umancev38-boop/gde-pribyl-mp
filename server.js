@@ -365,6 +365,7 @@ app.post("/api/auth/sms/request",rateLimit({max:4,windowMs:600000}),sameOrigin,a
   const client=await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[phone]);
     const previous=await client.query("SELECT last_sent_at FROM phone_auth_codes WHERE phone=$1 FOR UPDATE",[phone]);
     if(previous.rowCount&&Date.now()-new Date(previous.rows[0].last_sent_at).getTime()<60000) {
       await client.query("ROLLBACK");
@@ -759,7 +760,7 @@ app.get("/health", async (_req, res) => {
   res.setHeader("Cache-Control","no-store");
   res.status(healthy?200:503).json({
     ok: healthy, version: "1.0.0", accountsConfigured: Boolean(pool), serverSideQuotas: true,
-    paymentsConfigured: configReady(), databaseConfigured: Boolean(pool), databaseHealthy, marketplaceEncryptionConfigured: Boolean(process.env.MARKETPLACE_ENCRYPTION_KEY),
+    paymentsConfigured: configReady(), smsConfigured: Boolean(SMSC_API_KEY), databaseConfigured: Boolean(pool), databaseHealthy, marketplaceEncryptionConfigured: Boolean(process.env.MARKETPLACE_ENCRYPTION_KEY),
     merchantConfigured: Boolean(MERCHANT_LOGIN), passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
     plansConfigured: Object.keys(plans).length > 0, testMode: TEST_MODE, entitlements: PLAN_ENTITLEMENTS,
     planSummary: Object.fromEntries(Object.entries(plans).map(([code, plan]) => [code, { amount: Number(plan.amount), days: Number(plan.days), label: String(plan.label || code) }]))
