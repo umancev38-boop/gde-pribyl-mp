@@ -14,16 +14,26 @@ app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(express.json({ limit: "2mb" }));
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
+function requestOrigin(req) {
+  return `${req.protocol}://${req.get("host")}`;
+}
+function isAllowedOrigin(req) {
+  const origin = req.headers.origin;
+  return !origin || origin === FRONTEND_ORIGIN || origin === requestOrigin(req);
+}
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin === FRONTEND_ORIGIN) {
-    res.setHeader("Access-Control-Allow-Origin", FRONTEND_ORIGIN);
+  if (origin && isAllowedOrigin(req)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("Access-Control-Allow-Credentials", "true");
   }
-  if (req.method === "OPTIONS") return res.sendStatus(204);
+  if (req.method === "OPTIONS") {
+    if (!isAllowedOrigin(req)) return res.sendStatus(403);
+    return res.sendStatus(204);
+  }
   next();
 });
 
@@ -243,7 +253,7 @@ function clearSession(res) {
   res.clearCookie(SESSION_COOKIE,{httpOnly:true,secure:true,sameSite:"lax",path:"/"});
 }
 function sameOrigin(req,res,next) {
-  if(req.headers.origin!==FRONTEND_ORIGIN) return res.status(403).json({error:"Запрос отклонён: неверный источник."});
+  if (!isAllowedOrigin(req)) return res.status(403).json({error:"Запрос отклонён: неверный источник."});
   next();
 }
 function derivePassword(password,salt) {
