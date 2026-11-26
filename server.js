@@ -385,6 +385,54 @@ app.post("/api/auth/sms/verify",rateLimit({max:8,windowMs:600000}),sameOrigin,as
     return res.status(500).json({error:"Не удалось подтвердить номер. Попробуй ещё раз."});
   } finally { client.release(); }
 });
+app.post("/api/auth/sms/link/request",rateLimit({max:4,windowMs:600000}),requireUser,sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone);
+  if(!phone) return res.status(400).json({error:"Укажи номер телефона в международном формате."});
+  if(phone===req.user.phone) return res.status(400).json({error:"Этот номер уже привязан к аккаунту."});
+  if(!SMSC_API_KEY) return res.status(503).json({error:"Отправка СМС пока не подключена на сервере."});
+  const occupied=await pool.query("SELECT 1 FROM users WHERE phone=$1 AND phone_verified=TRUE AND id<>$2",[phone,req.user.id]);
+  if(occupied.rowCount) return res.status(409).json({error:"Этот номер уже привязан к другому аккаунту."});
+  const code=String(crypto.randomInt(100000,1000000));
+  const salt=crypto.randomBytes(16).toString("hex");
+  const codeHash=crypto.createHash("sha256").update(salt+":"+code).digest("hex");
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[phone]);
+    const previous=await client.query("SELECT last_sent_at FROM phone_auth_codes WHERE phone=$1 FOR UPDATE",[phone]);
+    if(previous.rowCount&&Date.now()-new Date(previous.rows[0].last_sent_at).getTime()<60000) { await client.query("ROLLBACK"); return res.status(429).json({error:"Код уже отправлялся. Подожди минуту."}); }
+    await client.query("INSERT INTO phone_auth_codes(phone,code_hash,code_salt,expires_at,attempts,last_sent_at,created_at) VALUES($1,$2,$3,NOW()+make_interval(mins => 5),0,NOW(),NOW()) ON CONFLICT(phone) DO UPDATE SET code_hash=EXCLUDED.code_hash,code_salt=EXCLUDED.code_salt,expires_at=EXCLUDED.expires_at,attempts=0,last_sent_at=NOW(),created_at=NOW()",[phone,codeHash,salt]);
+    await client.query("COMMIT");
+    await sendSmsCode(phone,code);
+    return res.json({ok:true,message:"Код для привязки номера отправлен. Он действует 5 минут."});
+  } catch(error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    await pool.query("DELETE FROM phone_auth_codes WHERE phone=$1 AND code_hash=$2",[phone,codeHash]).catch(()=>{});
+    console.error("Phone link code request failed:",error.message);
+    return res.status(503).json({error:"Не удалось отправить СМС. Попробуй позже."});
+  } finally { client.release(); }
+});
+app.post("/api/auth/sms/link/verify",rateLimit({max:8,windowMs:600000}),requireUser,sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone),code=String(req.body?.code||"").trim();
+  if(!phone||!/^[0-9]{6}$/.test(code)) return res.status(400).json({error:"Проверь номер и шестизначный код."});
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const stored=await client.query("SELECT code_hash,code_salt,expires_at,attempts FROM phone_auth_codes WHERE phone=$1 FOR UPDATE",[phone]);
+    if(!stored.rowCount||new Date(stored.rows[0].expires_at).getTime()<=Date.now()||Number(stored.rows[0].attempts)>=5) { await client.query("DELETE FROM phone_auth_codes WHERE phone=$1",[phone]); await client.query("COMMIT"); return res.status(400).json({error:"Код истёк или больше недействителен. Запроси новый."}); }
+    const candidate=crypto.createHash("sha256").update(stored.rows[0].code_salt+":"+code).digest("hex");
+    if(!safeEqual(candidate,stored.rows[0].code_hash)) { await client.query("UPDATE phone_auth_codes SET attempts=attempts+1 WHERE phone=$1",[phone]); await client.query("COMMIT"); return res.status(400).json({error:"Неверный код."}); }
+    await client.query("DELETE FROM phone_auth_codes WHERE phone=$1",[phone]);
+    await client.query("UPDATE users SET phone=$1,phone_verified=TRUE WHERE id=$2",[phone,req.user.id]);
+    await client.query("COMMIT");
+    return res.json({ok:true,user:{id:req.user.id,email:req.user.email,phone}});
+  } catch(error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    if(error.code==="23505") return res.status(409).json({error:"Этот номер уже привязан к другому аккаунту."});
+    console.error("Phone link verification failed:",error.message);
+    return res.status(500).json({error:"Не удалось привязать номер."});
+  } finally { client.release(); }
+});
 app.get("/api/auth/me",requireUser,async(req,res)=>{
   res.setHeader("Cache-Control","no-store, private");
   res.json({user:req.user,...await accountPlan(req.user.id)});
