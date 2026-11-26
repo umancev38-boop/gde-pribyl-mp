@@ -4,7 +4,7 @@ services:
     runtime: static
     repo: https://github.com/umancev38-boop/gde-pribyl-mp
     branch: main
-    staticPublishPath: .
+    staticPublishPath: public
     routes:
       - type: rewrite
         source: /api/*
