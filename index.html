@@ -187,7 +187,7 @@ button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlig
 
 <section class="panel accountPanel" id="accountPanel" aria-labelledby="accountTitle">
 <h2 id="accountTitle">Аккаунт и облачная синхронизация</h2>
-<p class="recordsIntro">Создай аккаунт или войди, чтобы хранить товары и историю в облаке и пользоваться подпиской на разных устройствах.</p>
+<p class="recordsIntro">Вход по номеру телефона: получи одноразовый СМС-код. Он подходит и для регистрации, и для восстановления доступа. Старый вход по e-mail сохранён.</p>
 <div class="accountGrid">
 <div class="field"><label for="smsPhone">Вход и регистрация по СМС</label><input id="smsPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+79991234567" maxlength="20"></div>
 <div class="field"><label for="smsCode">Код из СМС</label><input id="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6 цифр" maxlength="6"></div>
@@ -196,9 +196,9 @@ button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlig
 <button id="requestSmsCode" type="button">Получить код по СМС</button>
 <button id="verifySmsCode" type="button" class="secondary">Войти / создать аккаунт</button>
 </div>
-<p class="accountMeta">Номер телефона подтверждается одноразовым кодом. Повторный запрос доступен через минуту.</p>
+<p class="accountMeta">Номер подтверждается одноразовым кодом. Повторный запрос доступен через минуту. Отправка СМС включится после подключения SMS-провайдера на сервере.</p>
 <div class="accountGrid">
-<div class="field"><label for="accountEmail">E-mail</label><input id="accountEmail" type="email" autocomplete="email" placeholder="name@example.com"></div>
+<div class="field"><label for="accountEmail">E-mail (для старых аккаунтов)</label><input id="accountEmail" type="email" autocomplete="email" placeholder="name@example.com"></div>
 <div class="field"><label for="accountPassword">Пароль (от 10 символов)</label><input id="accountPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" placeholder="Не менее 10 символов"></div>
 </div>
 <div class="accountActions">
@@ -636,7 +636,7 @@ function setAccountStatus(message,warn=false){
 function updateAuthUI(){
  const signedIn=Boolean(accountUser);
  renderMarketplaceState();
- el('registerAccount').hidden=signedIn;el('loginAccount').hidden=signedIn;
+ el('registerAccount').hidden=true;el('loginAccount').hidden=signedIn;
  el('logoutAccount').hidden=!signedIn;el('syncAccount').hidden=!signedIn;
  el('resendVerification').hidden=signedIn;el('forgotPassword').hidden=signedIn;
  el('accountEmail').disabled=signedIn;el('accountPassword').disabled=signedIn;
