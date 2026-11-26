@@ -187,14 +187,14 @@ button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlig
 
 <section class="panel accountPanel" id="accountPanel" aria-labelledby="accountTitle">
 <h2 id="accountTitle">Аккаунт и облачная синхронизация</h2>
-<p class="recordsIntro">Регистрация, вход и восстановление доступа по номеру телефона. Получи одноразовый СМС-код.</p>
+<p class="recordsIntro">Регистрация, вход и восстановление доступа по номеру телефона. Получи одноразовый СМС-код. Если аккаунт уже существует, ты войдёшь в него; если нет, он будет создан автоматически.</p>
 <div class="accountGrid">
 <div class="field"><label for="smsPhone">Вход и регистрация по СМС</label><input id="smsPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+79991234567" maxlength="20"></div>
 <div class="field"><label for="smsCode">Код из СМС</label><input id="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6 цифр" maxlength="6"></div>
 </div>
 <div class="accountActions">
 <button id="requestSmsCode" type="button">Получить код по СМС</button>
-<button id="verifySmsCode" type="button" class="secondary">Войти / создать аккаунт</button>
+<button id="verifySmsCode" type="button" class="secondary">Подтвердить код и продолжить</button>
 </div>
 <p class="accountMeta">Номер подтверждается одноразовым кодом. Повторный запрос доступен через минуту. Отправка СМС включится после подключения SMS-провайдера на сервере.</p>
 <div class="accountActions"><button id="logoutAccount" type="button" class="secondary" hidden>Выйти</button><button id="syncAccount" type="button" class="secondary" hidden>Синхронизировать данные</button></div>
