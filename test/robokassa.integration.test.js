@@ -55,13 +55,21 @@ test("Robokassa payment signature, callback, replay and subscription lifecycle",
     }
     assert.equal(ready, true, "API did not become healthy: " + logs);
 
-    const email = "robokassa-" + randomUUID() + "@example.test";
-    const registration = await request("/api/auth/register", {
+    testPool = new pg.Pool({ connectionString: databaseUrl });
+    const phone = "15557654321";
+    const code = "654321";
+    const salt = randomUUID();
+    const codeHash = createHash("sha256").update(salt + ":" + code).digest("hex");
+    await testPool.query(
+      "INSERT INTO phone_auth_codes(phone,code_hash,code_salt,expires_at,attempts,last_sent_at,created_at) VALUES($1,$2,$3,NOW()+INTERVAL '5 minutes',0,NOW(),NOW())",
+      [phone, codeHash, salt]
+    );
+    const registration = await request("/api/auth/sms/verify", {
       method: "POST",
       headers: { Origin: origin, "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: "ValidPass123!" })
+      body: JSON.stringify({ phone, code })
     });
-    assert.equal(registration.status, 201);
+    assert.equal(registration.status, 200);
     const cookie = registration.headers.get("set-cookie")?.match(/gpm_session=([^;]+)/)?.[1];
     assert.ok(cookie);
 
