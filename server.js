@@ -75,6 +75,7 @@ function rateLimit({ windowMs = RATE_LIMIT_WINDOW_MS, max = RATE_LIMIT_MAX } = {
 
 const PORT = Number(process.env.PORT || 3000);
 const SITE_URL = process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
+const API_PUBLIC_URL = process.env.API_PUBLIC_URL || "https://gde-pribyl-mp-api.onrender.com";
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "";
 const MERCHANT_LOGIN = process.env.ROBOKASSA_MERCHANT_LOGIN || "";
@@ -306,7 +307,7 @@ async function sendAccountEmail(to,subject,html) {
 }
 async function sendVerificationEmail(userId,email) {
   const token=await createAuthToken(userId,"verify_email",24);
-  const url=SITE_URL+"/api/auth/verify-email?token="+encodeURIComponent(token);
+  const url=API_PUBLIC_URL+"/api/auth/verify-email?token="+encodeURIComponent(token);
   await sendAccountEmail(email,"Подтверждение e-mail для Где прибыль",
     '<p>Подтверди адрес электронной почты для аккаунта «Где прибыль».</p><p><a href="'+url+'">Подтвердить e-mail</a></p><p>Ссылка действует 24 часа. Если ты не создавал аккаунт, просто проигнорируй письмо.</p>');
 }
