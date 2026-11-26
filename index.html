@@ -312,7 +312,12 @@ function calc(){
  return {market:el('market').value,price:p,cost:c,commission:raw.commission,logistics:l,ads:a,other:o,storage:s,packaging:pack,returns:ret,tax:raw.tax,quantity:q,profit,margin,total:profit*q,expenses,expensesPerUnit:expenses,expensesTotal:expenses*q,breakeven:be,valid};
 }
 function resetExample(){
- for(const id of ids){if(id==='market')continue;const field=el(id);if(!field)continue;field.value='';}
+ const example={price:2490,cost:800,commission:15,logistics:250,ads:200,other:140,storage:0,packaging:0,returns:0,tax:6,quantity:1};
+ for(const id of ids){
+  if(id==='market')continue;
+  const field=el(id);
+  if(field)field.value=String(example[id]??'');
+ }
  calc();
  el('reset').blur();
 }
