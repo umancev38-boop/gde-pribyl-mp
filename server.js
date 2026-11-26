@@ -78,6 +78,8 @@ const SITE_URL = process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || "https://gde-pribyl-mp-api.onrender.com";
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "";
+const SMSC_API_KEY = process.env.SMSC_API_KEY || "";
+const SMSC_SENDER = process.env.SMSC_SENDER || "";
 const MERCHANT_LOGIN = process.env.ROBOKASSA_MERCHANT_LOGIN || "";
 const PASSWORD_1 = process.env.ROBOKASSA_PASSWORD_1 || "";
 const PASSWORD_2 = process.env.ROBOKASSA_PASSWORD_2 || "";
@@ -162,6 +164,11 @@ async function initDb() {
       email_verified BOOLEAN NOT NULL DEFAULT TRUE
     );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique_idx ON users(phone) WHERE phone IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS phone_auth_codes (phone TEXT PRIMARY KEY, code_hash TEXT NOT NULL, code_salt TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS auth_tokens (
       token_hash TEXT PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -311,12 +318,30 @@ async function sendVerificationEmail(userId,email) {
   await sendAccountEmail(email,"Подтверждение e-mail для Где прибыль",
     '<p>Подтверди адрес электронной почты для аккаунта «Где прибыль».</p><p><a href="'+url+'">Подтвердить e-mail</a></p><p>Ссылка действует 24 часа. Если ты не создавал аккаунт, просто проигнорируй письмо.</p>');
 }
+function normalizePhone(value) {
+  const raw=String(value||"").trim();
+  if(!/^\+?[0-9 ()-]+$/.test(raw)) return "";
+  const digits=raw.replace(/\D/g,"");
+  return digits.length>=10&&digits.length<=15?digits:"";
+}
+async function sendSmsCode(phone,code) {
+  if(!SMSC_API_KEY) throw new Error("SMS provider is not configured");
+  const body=new URLSearchParams({apikey:SMSC_API_KEY,phones:phone,mes:`Код входа Где прибыль: ${code}. Никому его не сообщай.`,fmt:"3",charset:"utf-8"});
+  if(SMSC_SENDER) body.set("sender",SMSC_SENDER);
+  const response=await fetch("https://smsc.ru/sys/send.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+  let result={};
+  try { result=await response.json(); } catch { throw new Error("SMS provider returned an invalid response"); }
+  if(!response.ok||result.error||result.error_code||!result.id) {
+    console.error("SMS provider rejected message:",response.status,JSON.stringify(result).slice(0,400));
+    throw new Error("SMS provider request failed");
+  }
+}
 async function requireUser(req,res,next) {
   if(!pool) return res.status(503).json({error:"База данных не настроена."});
   try {
     const token=cookieValue(req,SESSION_COOKIE);
     if(!token||token.length>128) return res.status(401).json({error:"Войди в аккаунт, чтобы продолжить."});
-    const result=await pool.query(`SELECT u.id,u.email FROM user_sessions s JOIN users u ON u.id=s.user_id
+    const result=await pool.query(`SELECT u.id,u.email,u.phone FROM user_sessions s JOIN users u ON u.id=s.user_id
       WHERE s.token_hash=$1 AND s.expires_at>NOW() LIMIT 1`,[hashToken(token)]);
     if(!result.rowCount) return res.status(401).json({error:"Сессия завершена. Войди снова."});
     req.user=result.rows[0]; next();
@@ -330,6 +355,72 @@ async function accountPlan(userId) {
   const plan=normalizePlanCode(result.rows[0]?.plan_code);
   return {plan,expiresAt:result.rows[0]?.expires_at||null,limits:PLAN_ENTITLEMENTS[plan]};
 }
+app.post("/api/auth/sms/request",rateLimit({max:4,windowMs:600000}),sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone);
+  if(!phone) return res.status(400).json({error:"Укажи номер телефона в международном формате, например +79991234567."});
+  if(!SMSC_API_KEY) return res.status(503).json({error:"Отправка СМС пока не подключена на сервере. Код регистрации уже подготовлен."});
+  const code=String(crypto.randomInt(100000,1000000));
+  const salt=crypto.randomBytes(16).toString("hex");
+  const codeHash=crypto.createHash("sha256").update(salt+":"+code).digest("hex");
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const previous=await client.query("SELECT last_sent_at FROM phone_auth_codes WHERE phone=$1 FOR UPDATE",[phone]);
+    if(previous.rowCount&&Date.now()-new Date(previous.rows[0].last_sent_at).getTime()<60000) {
+      await client.query("ROLLBACK");
+      return res.status(429).json({error:"Код уже отправлялся. Подожди минуту перед повторным запросом."});
+    }
+    await client.query("INSERT INTO phone_auth_codes(phone,code_hash,code_salt,expires_at,attempts,last_sent_at,created_at) VALUES($1,$2,$3,NOW()+make_interval(mins => 5),0,NOW(),NOW()) ON CONFLICT(phone) DO UPDATE SET code_hash=EXCLUDED.code_hash,code_salt=EXCLUDED.code_salt,expires_at=EXCLUDED.expires_at,attempts=0,last_sent_at=NOW(),created_at=NOW()",[phone,codeHash,salt]);
+    await client.query("COMMIT");
+    await sendSmsCode(phone,code);
+    return res.json({ok:true,message:"Если номер доступен, СМС с кодом отправлено. Код действует 5 минут."});
+  } catch(error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    await pool.query("DELETE FROM phone_auth_codes WHERE phone=$1 AND code_hash=$2",[phone,codeHash]).catch(()=>{});
+    console.error("SMS code request failed:",error.message);
+    return res.status(503).json({error:"Не удалось отправить СМС. Проверь номер или попробуй позже."});
+  } finally { client.release(); }
+});
+app.post("/api/auth/sms/verify",rateLimit({max:8,windowMs:600000}),sameOrigin,async(req,res)=>{
+  const phone=normalizePhone(req.body?.phone);
+  const code=String(req.body?.code||"").trim();
+  if(!phone||!/^[0-9]{6}$/.test(code)) return res.status(400).json({error:"Проверь номер телефона и шестизначный код."});
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const stored=await client.query("SELECT code_hash,code_salt,expires_at,attempts FROM phone_auth_codes WHERE phone=$1 FOR UPDATE",[phone]);
+    if(!stored.rowCount||new Date(stored.rows[0].expires_at).getTime()<=Date.now()||Number(stored.rows[0].attempts)>=5) {
+      await client.query("DELETE FROM phone_auth_codes WHERE phone=$1",[phone]);
+      await client.query("COMMIT");
+      return res.status(400).json({error:"Код истёк или больше недействителен. Запроси новый."});
+    }
+    const candidate=crypto.createHash("sha256").update(stored.rows[0].code_salt+":"+code).digest("hex");
+    if(!safeEqual(candidate,stored.rows[0].code_hash)) {
+      await client.query("UPDATE phone_auth_codes SET attempts=attempts+1 WHERE phone=$1",[phone]);
+      await client.query("COMMIT");
+      return res.status(400).json({error:"Неверный код. Проверь СМС и попробуй ещё раз."});
+    }
+    await client.query("DELETE FROM phone_auth_codes WHERE phone=$1",[phone]);
+    let found=await client.query("SELECT id,phone,email FROM users WHERE phone=$1 AND phone_verified=TRUE FOR UPDATE",[phone]);
+    if(!found.rowCount) {
+      const salt=crypto.randomBytes(16).toString("hex");
+      const randomPassword=crypto.randomBytes(32).toString("base64url");
+      const passwordHash=await derivePassword(randomPassword,salt);
+      const created=await client.query("INSERT INTO users(email,phone,phone_verified,password_salt,password_hash,email_verified) VALUES(NULL,$1,TRUE,$2,$3,TRUE) ON CONFLICT DO NOTHING RETURNING id,phone,email",[phone,salt,passwordHash]);
+      found=created.rowCount?created:await client.query("SELECT id,phone,email FROM users WHERE phone=$1 AND phone_verified=TRUE FOR UPDATE",[phone]);
+    }
+    if(!found.rowCount) throw new Error("Could not create or load phone account");
+    const user=found.rows[0];
+    const sessionToken=await createUserSession(user.id,client);
+    await client.query("COMMIT");
+    sessionCookie(res,sessionToken);
+    return res.json({user:{id:user.id,email:user.email,phone:user.phone},...await accountPlan(user.id)});
+  } catch(error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    console.error("SMS verification failed:",error.message);
+    return res.status(500).json({error:"Не удалось подтвердить номер. Попробуй ещё раз."});
+  } finally { client.release(); }
+});
 app.post("/api/auth/register",rateLimit({max:5}),sameOrigin,async(req,res)=>{
   if(!pool) return res.status(503).json({error:"Регистрация временно недоступна."});
   const email=String(req.body?.email||"").trim().toLowerCase();
@@ -712,12 +803,12 @@ app.post("/api/payments/create", rateLimit({ max: 8 }), requireUser, sameOrigin,
       OutSum: amount,
       InvId: invoiceId,
       Description: `Подписка Где прибыль МП ${String(plan.label || planCode).slice(0, 80)}`,
-      Email: email,
       Receipt: encodeURIComponent(receipt),
       Culture: "ru",
       Encoding: "utf-8",
       Shp_user: String(userId)
     };
+    if (email) params.Email = email;
     if (TEST_MODE) params.IsTest = "1";
     params.SignatureValue = paymentSignature(amount, invoiceId, encodeURIComponent(receipt), { Shp_user: String(userId) });
 
@@ -836,6 +927,7 @@ app.listen(PORT, async () => {
     console.log(`Где прибыль МП API 1.0.0 listening on ${PORT}`);
     console.log("Payment configuration:", JSON.stringify({
       databaseConfigured: Boolean(pool),
+      smsConfigured: Boolean(SMSC_API_KEY),
       merchantConfigured: Boolean(MERCHANT_LOGIN),
       passwordsConfigured: Boolean(PASSWORD_1 && PASSWORD_2),
       plansConfigured: Object.keys(plans).length > 0,
