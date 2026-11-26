@@ -310,8 +310,8 @@ async function createAuthToken(userId,purpose,expiresInHours) {
   return token;
 }
 function normalizePhone(value) {
-  const phone=String(value||"").trim().replace(/[\\s().-]/g,"");
-  return /^\\+[1-9]\\d{7,14}$/.test(phone) ? phone : "";
+  const phone=String(value||"").trim().replace(/[\s().-]/g,"");
+  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : "";
 }
 async function twilioVerify(action,phone,code) {
   if(!SMS_CONFIGURED) throw new Error("SMS provider is not configured");
@@ -386,7 +386,7 @@ app.post("/api/auth/phone/register",rateLimit({max:3,windowMs:10*60_000}),sameOr
 });
 app.post("/api/auth/phone/verify-registration",rateLimit({max:5}),sameOrigin,async(req,res)=>{
   const phone=normalizePhone(req.body?.phone),code=String(req.body?.code||"").trim();
-  if(!phone||!/^\\d{4,10}$/.test(code)) return res.status(400).json({error:"Проверь номер телефона и SMS-код."});
+  if(!phone||!/^\d{4,10}$/.test(code)) return res.status(400).json({error:"Проверь номер телефона и SMS-код."});
   const client=await pool.connect();
   try {
     const pending=await client.query("SELECT password_salt,password_hash FROM pending_phone_registrations WHERE phone_e164=$1 AND expires_at>NOW()",[phone]);
@@ -432,7 +432,7 @@ app.post("/api/auth/phone/forgot-password",rateLimit({max:3,windowMs:10*60_000})
 });
 app.post("/api/auth/phone/reset-password",rateLimit({max:5}),sameOrigin,async(req,res)=>{
   const phone=normalizePhone(req.body?.phone),code=String(req.body?.code||"").trim(),password=String(req.body?.password||"");
-  if(!phone||!/^\\d{4,10}$/.test(code)) return res.status(400).json({error:"Проверь номер телефона и SMS-код."});
+  if(!phone||!/^\d{4,10}$/.test(code)) return res.status(400).json({error:"Проверь номер телефона и SMS-код."});
   if(password.length<10||password.length>128) return res.status(400).json({error:"Новый пароль должен содержать от 10 до 128 символов."});
   try {
     const checked=await twilioVerify("check",phone,code);
