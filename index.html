@@ -189,6 +189,15 @@ button,.fileButton{min-height:44px;touch-action:manipulation;-webkit-tap-highlig
 <h2 id="accountTitle">Аккаунт и облачная синхронизация</h2>
 <p class="recordsIntro">Создай аккаунт или войди, чтобы хранить товары и историю в облаке и пользоваться подпиской на разных устройствах.</p>
 <div class="accountGrid">
+<div class="field"><label for="smsPhone">Вход и регистрация по СМС</label><input id="smsPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+79991234567" maxlength="20"></div>
+<div class="field"><label for="smsCode">Код из СМС</label><input id="smsCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6 цифр" maxlength="6"></div>
+</div>
+<div class="accountActions">
+<button id="requestSmsCode" type="button">Получить код по СМС</button>
+<button id="verifySmsCode" type="button" class="secondary">Войти / создать аккаунт</button>
+</div>
+<p class="accountMeta">Номер телефона подтверждается одноразовым кодом. Повторный запрос доступен через минуту.</p>
+<div class="accountGrid">
 <div class="field"><label for="accountEmail">E-mail</label><input id="accountEmail" type="email" autocomplete="email" placeholder="name@example.com"></div>
 <div class="field"><label for="accountPassword">Пароль (от 10 символов)</label><input id="accountPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" placeholder="Не менее 10 символов"></div>
 </div>
@@ -631,8 +640,10 @@ function updateAuthUI(){
  el('logoutAccount').hidden=!signedIn;el('syncAccount').hidden=!signedIn;
  el('resendVerification').hidden=signedIn;el('forgotPassword').hidden=signedIn;
  el('accountEmail').disabled=signedIn;el('accountPassword').disabled=signedIn;
+  el('smsPhone').disabled=signedIn;el('smsCode').disabled=signedIn;
+  el('requestSmsCode').hidden=signedIn;el('verifySmsCode').hidden=signedIn;
  el('accountMeta').textContent=signedIn
-  ?'Выполнен вход: '+accountUser.email+'. Тариф: '+currentPlan.toUpperCase()+(accountExpiry?' · действует до '+new Date(accountExpiry).toLocaleDateString('ru-RU'):'')
+  ?'Выполнен вход: '+(accountUser.phone||accountUser.email||'аккаунт')+'. Тариф: '+currentPlan.toUpperCase()+(accountExpiry?' · действует до '+new Date(accountExpiry).toLocaleDateString('ru-RU'):'')
   :'Не выполнен вход. Локальные данные остаются на этом устройстве.';
  document.querySelectorAll('[data-pay-plan]').forEach(button=>{button.disabled=!signedIn||!paymentsReady;button.title=!signedIn?'Сначала войди в аккаунт.':!paymentsReady?paymentConfigMessage:'Оформить подписку'});
  paymentStatus.textContent=!paymentsReady?paymentConfigMessage:!signedIn?'Войди в аккаунт, чтобы оформить подписку.':(subscriptionMessage||'Можно оформить подписку.');
@@ -689,6 +700,27 @@ async function authenticate(mode){
  }catch(error){setAccountStatus(error.message,true)}
  finally{buttons.forEach(id=>el(id).disabled=false)}
 }
+async function authenticateBySms(mode){
+ const phone=el('smsPhone').value.trim();
+ const code=el('smsCode').value.trim();
+ const button=el(mode==='request'?'requestSmsCode':'verifySmsCode');
+ button.disabled=true;
+ try{
+  if(mode==='request'){
+   const data=await apiRequest('/api/auth/sms/request',{method:'POST',body:JSON.stringify({phone})});
+   setAccountStatus(data.message||'Запрос на отправку кода принят.');
+  }else{
+   const data=await apiRequest('/api/auth/sms/verify',{method:'POST',body:JSON.stringify({phone,code})});
+   el('smsCode').value='';
+   accountUser=data.user;currentPlan=data.plan||'free';accountLimits=data.limits||PLAN_LIMITS[currentPlan]||PLAN_LIMITS.free;accountExpiry=data.expiresAt||null;
+   setAccountStatus('Номер подтверждён. Вход выполнен.');
+   await refreshSubscription();
+  }
+ }catch(error){setAccountStatus(error.message,true)}
+ finally{button.disabled=false}
+}
+el('requestSmsCode').addEventListener('click',()=>authenticateBySms('request'));
+el('verifySmsCode').addEventListener('click',()=>authenticateBySms('verify'));
 el('registerAccount').addEventListener('click',()=>authenticate('register'));
 el('loginAccount').addEventListener('click',()=>authenticate('login'));
 el('resendVerification').addEventListener('click',async()=>{
