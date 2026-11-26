@@ -1,32 +1,45 @@
 import express from "express";
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { PLAN_ENTITLEMENTS, normalizePlanCode, isWithinPlanLimits } from "./lib/entitlements.js";
 import { MarketplaceApiError, parseEncryptionKey, encryptCredentials, decryptCredentials, normalizeMarketplaceCredentials, fetchMarketplaceSnapshot } from "./lib/marketplaces.js";
 
 const { Pool } = pg;
 const app = express();
+const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(express.json({ limit: "2mb" }));
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://gde-pribyl-mp.onrender.com";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || process.env.SITE_URL || "https://gde-pribyl-mp.onrender.com";
 const FRONTEND_ORIGINS = new Set([
   "https://gde-pribyl-mp.onrender.com",
   "https://gde-pribyl-mp.layero.app",
   FRONTEND_ORIGIN,
   ...(process.env.FRONTEND_ORIGINS || "").split(",").map((value) => value.trim()).filter(Boolean),
 ]);
+function requestOrigin(req) {
+  return `${req.protocol}://${req.get("host")}`;
+}
+function isAllowedOrigin(req) {
+  const origin = req.headers.origin;
+  return !origin || FRONTEND_ORIGINS.has(origin) || origin === requestOrigin(req);
+}
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && FRONTEND_ORIGINS.has(origin)) {
+  if (origin && isAllowedOrigin(req)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("Access-Control-Allow-Credentials", "true");
   }
-  if (req.method === "OPTIONS") return res.sendStatus(204);
+  if (req.method === "OPTIONS") {
+    if (!isAllowedOrigin(req)) return res.sendStatus(403);
+    return res.sendStatus(204);
+  }
   next();
 });
 
@@ -246,7 +259,9 @@ function clearSession(res) {
   res.clearCookie(SESSION_COOKIE,{httpOnly:true,secure:true,sameSite:"none",path:"/"});
 }
 function sameOrigin(req,res,next) {
-  if(!FRONTEND_ORIGINS.has(req.headers.origin)) return res.status(403).json({error:"Запрос отклонён: неверный источник."});
+  if (!req.headers.origin || !isAllowedOrigin(req)) {
+    return res.status(403).json({error:"Запрос отклонён: неверный источник."});
+  }
   next();
 }
 function derivePassword(password,salt) {
@@ -532,6 +547,9 @@ app.delete("/api/marketplaces/:marketplace", rateLimit({ max: 5 }), requireUser,
     res.status(500).json({ error: "Не удалось отключить маркетплейс." });
   }
 });
+
+app.get("/", (_req, res) => res.sendFile(path.join(ROOT_DIR, "index.html")));
+app.get("/legal.html", (_req, res) => res.sendFile(path.join(ROOT_DIR, "legal.html")));
 
 app.get("/health", async (_req, res) => {
   let databaseHealthy=false;
